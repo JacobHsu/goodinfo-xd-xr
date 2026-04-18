@@ -78,6 +78,22 @@ goodinfo-xd-xr/
 - 資料來源為 [Goodinfo 台灣股市資訊網](https://goodinfo.tw)，僅供個人學習參考
 - 即時報價來自 [TWSE Open API](https://openapi.twse.com.tw) 及 [TPEX Open API](https://www.tpex.org.tw/openapi)
 
+## References
+
+### Goodinfo 資料來源頁面
+
+| 說明 | 網址 |
+|------|------|
+| 股票股利排行（年度） | [StockList – 股票股利](https://goodinfo.tw/tw/StockList.asp?MARKET_CAT=%E7%86%B1%E9%96%80%E6%8E%92%E8%A1%8C&INDUSTRY_CAT=%E8%82%A1%E7%A5%A8%E8%82%A1%E5%88%A9+%28%E5%83%85%E9%A1%AF%E7%A4%BA%E5%8E%BB%E5%B9%B4%E8%B3%87%E6%96%99%29%40%40%E8%82%A1%E7%A5%A8%E8%82%A1%E5%88%A9%40%40%E5%83%85%E9%A1%AF%E7%A4%BA%E5%8E%BB%E5%B9%B4%E8%B3%87%E6%96%99) |
+| 年度 EPS 最高排行 | [StockList – 年度EPS最高](https://goodinfo.tw/tw/StockList.asp?MARKET_CAT=%E7%86%B1%E9%96%80%E6%8E%92%E8%A1%8C&INDUSTRY_CAT=%E5%B9%B4%E5%BA%A6EPS%E6%9C%80%E9%AB%98) |
+
+### Open API
+
+| 說明 | 網址 |
+|------|------|
+| TWSE 即時報價 | https://openapi.twse.com.tw |
+| TPEX 即時報價 | https://www.tpex.org.tw/openapi |
+
 ## License
 
 [MIT](LICENSE)

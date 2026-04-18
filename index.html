@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width">
 <title>股票股利排行 2025 – 四碼股票</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%232e5496'/></svg>">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -376,6 +377,7 @@ function buildRow(d) {
     <td class="center">${fmtDate(d['除息交易日'])}</td>
     <td class="center">${fmtDate(d['除權交易日'])}</td>
     <td class="center">${fmtDate(d['現金股利發放日'])}</td>
+    <td class="center">${d['EPS'] != null ? (+d['EPS']).toFixed(2) : '-'}</td>
   </tr>`;
 }
 
@@ -393,6 +395,7 @@ function buildThead(tab) {
     <th rowspan="2" data-tab="${tab}" data-col="除息交易日">除息日</th>
     <th rowspan="2" data-tab="${tab}" data-col="除權交易日">除權日</th>
     <th rowspan="2" data-tab="${tab}" data-col="現金股利發放日">發放日</th>
+    <th rowspan="2" data-tab="${tab}" data-col="EPS">EPS</th>
   </tr>
   <tr class="subhead">
     <th data-tab="${tab}" data-col="成交">成交</th>
