@@ -1,0 +1,8 @@
+[2026-04-18T14:29:37.135Z] [error] Access to fetch at 'https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL' from origin 'http://localhost:8765' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+[2026-04-18T14:29:37.141Z] [error] Failed to load resource: net::ERR_FAILED
+[2026-04-18T14:29:37.175Z] [error] Access to fetch at 'https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes' from origin 'http://localhost:8765' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+[2026-04-18T14:29:37.175Z] [error] Failed to load resource: net::ERR_FAILED
+[2026-04-18T14:33:20.651Z] [error] Access to fetch at 'https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes' from origin 'http://localhost:8765' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+[2026-04-18T14:33:20.651Z] [error] Failed to load resource: net::ERR_FAILED
+[2026-04-18T14:33:20.731Z] [error] Access to fetch at 'https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL' from origin 'http://localhost:8765' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+[2026-04-18T14:33:20.732Z] [error] Failed to load resource: net::ERR_FAILED

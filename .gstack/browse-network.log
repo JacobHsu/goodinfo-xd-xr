@@ -1,0 +1,8 @@
+[2026-04-18T14:29:33.774Z] GET http://localhost:8765/ → 200 (138ms, 22523B)
+[2026-04-18T14:29:33.996Z] GET http://localhost:8765/data/index.json → 200 (95ms, 598824B)
+[2026-04-18T14:29:34.192Z] GET https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL → pending (?ms, ?B)
+[2026-04-18T14:29:34.193Z] GET https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes → pending (?ms, ?B)
+[2026-04-18T14:33:20.223Z] GET http://localhost:8765/ → 200 (7ms, 22983B)
+[2026-04-18T14:33:20.264Z] GET http://localhost:8765/data/index.json → 200 (9ms, 598824B)
+[2026-04-18T14:33:20.353Z] GET https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL → pending (?ms, ?B)
+[2026-04-18T14:33:20.354Z] GET https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes → pending (?ms, ?B)

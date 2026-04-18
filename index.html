@@ -226,6 +226,9 @@ tbody td.center { text-align: center; }
       <label style="margin-left:12px">
         <input type="checkbox" id="stock-lo"> 有除權
       </label>
+      <label style="margin-left:12px">
+        <input type="checkbox" id="gift-lo"> 有紀念品
+      </label>
       <div class="count">顯示 <b id="cnt-lo">0</b> 筆</div>
     </div>
     <div class="tbl-wrap">
@@ -256,6 +259,9 @@ tbody td.center { text-align: center; }
       </select>
       <label style="margin-left:12px">
         <input type="checkbox" id="stock-hi"> 有除權
+      </label>
+      <label style="margin-left:12px">
+        <input type="checkbox" id="gift-hi"> 有紀念品
       </label>
       <div class="count">顯示 <b id="cnt-hi">0</b> 筆</div>
     </div>
@@ -378,6 +384,7 @@ function buildRow(d) {
     <td class="center">${fmtDate(d['除權交易日'])}</td>
     <td class="center">${fmtDate(d['現金股利發放日'])}</td>
     <td class="center">${d['EPS'] != null ? (+d['EPS']).toFixed(2) : '-'}</td>
+    <td class="left">${d['紀念品'] || '-'}</td>
   </tr>`;
 }
 
@@ -396,6 +403,7 @@ function buildThead(tab) {
     <th rowspan="2" data-tab="${tab}" data-col="除權交易日">除權日</th>
     <th rowspan="2" data-tab="${tab}" data-col="現金股利發放日">發放日</th>
     <th rowspan="2" data-tab="${tab}" data-col="EPS">EPS</th>
+    <th rowspan="2" data-tab="${tab}" data-col="紀念品" class="left">紀念品</th>
   </tr>
   <tr class="subhead">
     <th data-tab="${tab}" data-col="成交">成交</th>
@@ -451,6 +459,7 @@ function applyFilter(tab) {
   const q         = document.getElementById(`search-${tab}`).value.trim().toLowerCase();
   const freq      = document.getElementById(`freq-${tab}`).value;
   const onlyStock = document.getElementById(`stock-${tab}`).checked;
+  const onlyGift  = document.getElementById(`gift-${tab}`).checked;
   const priceVal  = document.getElementById(`price-${tab}`)?.value;
   const priceNum  = priceVal ? Number(priceVal) : null;
 
@@ -459,8 +468,9 @@ function applyFilter(tab) {
     const matchQ = !q || String(d['代號']).includes(q) || (d['名稱'] || '').toLowerCase().includes(q);
     const matchF = !freq || d['股利發放頻率'] === freq;
     const matchS = !onlyStock || (d['股票股利'] > 0);
+    const matchG = !onlyGift || !!d['紀念品'];
     const matchP = priceNum === null || (tab === 'lo' ? price <= priceNum : price >= priceNum);
-    return matchQ && matchF && matchS && matchP;
+    return matchQ && matchF && matchS && matchG && matchP;
   });
   state[tab].filtered = doSort(base, tab);
   renderTab(tab);
@@ -618,6 +628,7 @@ fetch('data/index.json')
       document.getElementById(`price-${tab}`).addEventListener('change',  () => applyFilter(tab));
       document.getElementById(`freq-${tab}`).addEventListener('change',   () => applyFilter(tab));
       document.getElementById(`stock-${tab}`).addEventListener('change',  () => applyFilter(tab));
+      document.getElementById(`gift-${tab}`).addEventListener('change',   () => applyFilter(tab));
     });
 
     document.getElementById('loading').style.display = 'none';
