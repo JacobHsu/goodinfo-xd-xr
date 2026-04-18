@@ -1,3 +1,4 @@
+import argparse
 import re
 import time
 import random
@@ -19,17 +20,18 @@ RANK_LABELS = {
 }
 
 BASE_URL = "https://goodinfo.tw/tw/StockList.asp"
-COMMON_PARAMS = {
-    "SEARCH_WORD": "",
-    "MARKET_CAT": "熱門排行",
-    "INDUSTRY_CAT": "股票股利 (僅顯示去年資料)@@股票股利@@僅顯示去年資料",
-    "SHEET": "股利政策發放年度_去年",
-    "SHEET2": "股利分派與除權/息價股利率",
-    "RPT_TIME": "2025",
-    "STOCK_CODE": "",
-    "SORT_FIELD": "",
-    "SORT": "",
-}
+def make_common_params(year: str) -> dict:
+    return {
+        "SEARCH_WORD": "",
+        "MARKET_CAT": "熱門排行",
+        "INDUSTRY_CAT": "股票股利 (僅顯示去年資料)@@股票股利@@僅顯示去年資料",
+        "SHEET": "股利政策發放年度",
+        "SHEET2": "股利分派與除權/息價股利率",
+        "RPT_TIME": year,
+        "STOCK_CODE": "",
+        "SORT_FIELD": "",
+        "SORT": "",
+    }
 
 HEADERS = {
     "User-Agent": (
@@ -50,12 +52,12 @@ def make_client_key() -> str:
     return f"2.3|43100.1033238637|46433.436657197|{TZ_OFFSET}|{ts}|{ts}"
 
 
-def init_session() -> tuple[requests.Session, str]:
+def init_session(year: str = "2025") -> tuple[requests.Session, str]:
     session = requests.Session()
     session.headers.update(HEADERS)
 
     # Load main page to trigger cookie handshake and get REINIT
-    init_params = dict(COMMON_PARAMS)
+    init_params = make_common_params(year)
     init_params["RANK_RANGE"] = "300"
     r = session.get(BASE_URL + "?" + urlencode(init_params), timeout=30)
     r.encoding = "utf-8"
@@ -66,8 +68,8 @@ def init_session() -> tuple[requests.Session, str]:
     return session, reinit
 
 
-def fetch_rank_page(session: requests.Session, reinit: str, rank_idx: int) -> str:
-    params = dict(COMMON_PARAMS)
+def fetch_rank_page(session: requests.Session, reinit: str, rank_idx: int, year: str = "2025") -> str:
+    params = make_common_params(year)
     params["STEP"] = "DATA"
     params["RANK"] = str(rank_idx)
     if reinit:
@@ -147,16 +149,79 @@ def detect_total_pages(session: requests.Session, reinit: str) -> int:
     return len(RANK_LABELS)
 
 
+def build_json(year: str) -> None:
+    import os
+    prev_year = str(int(year) - 1)
+    csv_4digit = f"data/stock_dividend_{year}_4digit.csv"
+    prev_csv   = f"data/stock_dividend_{prev_year}_4digit.csv"
+
+    if not os.path.exists(csv_4digit):
+        print(f"找不到 {csv_4digit}，請先執行爬蟲")
+        return
+
+    df = pd.read_csv(csv_4digit, encoding="utf-8-sig")
+
+    # 排除當年未發股利
+    df["合計股利"] = pd.to_numeric(df["合計股利"], errors="coerce").fillna(0)
+    before = len(df)
+    df = df[df["合計股利"] > 0].copy()
+    print(f"排除 {year} 未發股利 {before - len(df)} 檔，剩 {len(df)} 筆")
+
+    # 排除合計殖利率 < 1%
+    df["除權息合計殖利率"] = pd.to_numeric(df["除權息合計殖利率"], errors="coerce").fillna(0)
+    before = len(df)
+    df = df[df["除權息合計殖利率"] >= 1].copy()
+    print(f"排除合計殖利率 < 1% 共 {before - len(df)} 檔，剩 {len(df)} 筆")
+
+    # 排除前一年未發股利
+    if os.path.exists(prev_csv):
+        df_prev = pd.read_csv(prev_csv, encoding="utf-8-sig")
+        df_prev["合計股利"] = pd.to_numeric(df_prev["合計股利"], errors="coerce").fillna(0)
+        no_div = set(df_prev[df_prev["合計股利"] == 0]["代號"].astype(str))
+        df = df[~df["代號"].astype(str).isin(no_div)].copy()
+        print(f"排除 {prev_year} 未發股利 {len(no_div)} 檔，剩 {len(df)} 筆")
+    else:
+        print(f"找不到 {prev_csv}，不過濾前年資料")
+
+    num_cols = [
+        "成交", "漲跌價", "漲跌幅",
+        "現金股利", "股票股利", "合計股利",
+        "除息價", "除息價現金殖利率",
+        "除權價", "除權價股票殖利率", "除權息合計殖利率",
+    ]
+    for col in num_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # 依殖利率降冪重排，排名重設為 1..N
+    df = df.sort_values("除權息合計殖利率", ascending=False).reset_index(drop=True)
+    df["排名"] = df.index + 1
+
+    out_json = "data/index.json"
+    df.to_json(out_json, orient="records", force_ascii=False)
+    print(f"JSON {len(df)} 筆，已存至 {out_json}")
+
+
 def main():
-    print("初始化 session...")
-    session, reinit = init_session()
+    parser = argparse.ArgumentParser(description="爬取 Goodinfo 股票股利資料")
+    parser.add_argument("--year", default="2025", help="資料年度，例如 2024 或 2025")
+    parser.add_argument("--json-only", action="store_true", help="只從現有 CSV 產生 JSON，不爬網站")
+    args = parser.parse_args()
+    year = args.year
+
+    if args.json_only:
+        build_json(year)
+        return
+
+    print(f"初始化 session（年度：{year}）...")
+    session, reinit = init_session(year)
     print(f"REINIT: {reinit}")
 
     all_rows: list[dict] = []
 
     for rank_idx, label in RANK_LABELS.items():
         print(f"取得排名 {label}（RANK={rank_idx}）...")
-        html = fetch_rank_page(session, reinit, rank_idx)
+        html = fetch_rank_page(session, reinit, rank_idx, year)
         rows = parse_table(html)
         print(f"  取得 {len(rows)} 筆")
         all_rows.extend(rows)
@@ -173,12 +238,40 @@ def main():
     os.makedirs("data", exist_ok=True)
 
     df = pd.DataFrame(all_rows)
-    df.to_csv("data/stock_dividend_2025.csv", index=False, encoding="utf-8-sig")
-    print(f"\n完成！共 {len(df)} 筆，已存至 data/stock_dividend_2025.csv")
+    out_all = f"data/stock_dividend_{year}.csv"
+    out_4digit = f"data/stock_dividend_{year}_4digit.csv"
 
-    df_4digit = df[df["代號"].astype(str).str.match(r"^\d{4}$")]
-    df_4digit.to_csv("data/stock_dividend_2025_4digit.csv", index=False, encoding="utf-8-sig")
-    print(f"四碼股票 {len(df_4digit)} 筆，已存至 data/stock_dividend_2025_4digit.csv")
+    df.to_csv(out_all, index=False, encoding="utf-8-sig")
+    print(f"\n完成！共 {len(df)} 筆，已存至 {out_all}")
+
+    df_4digit = df[df["代號"].astype(str).str.match(r"^\d{4}$")].copy()
+    df_4digit.to_csv(out_4digit, index=False, encoding="utf-8-sig")
+    print(f"四碼股票 {len(df_4digit)} 筆，已存至 {out_4digit}")
+
+    # JSON：排除前一年未發股利的股票
+    prev_year = str(int(year) - 1)
+    prev_csv = f"data/stock_dividend_{prev_year}_4digit.csv"
+    df_json = df_4digit.copy()
+    if os.path.exists(prev_csv):
+        df_prev = pd.read_csv(prev_csv, encoding="utf-8-sig")
+        df_prev["合計股利"] = pd.to_numeric(df_prev["合計股利"], errors="coerce").fillna(0)
+        no_div = set(df_prev[df_prev["合計股利"] == 0]["代號"].astype(str))
+        df_json = df_json[~df_json["代號"].astype(str).isin(no_div)]
+        print(f"排除 {prev_year} 未發股利 {len(no_div)} 檔，剩 {len(df_json)} 筆")
+
+    num_cols = [
+        "排名", "成交", "漲跌價", "漲跌幅",
+        "現金股利", "股票股利", "合計股利",
+        "除息價", "除息價現金殖利率",
+        "除權價", "除權價股票殖利率", "除權息合計殖利率",
+    ]
+    for col in num_cols:
+        if col in df_json.columns:
+            df_json[col] = pd.to_numeric(df_json[col], errors="coerce")
+
+    out_json = "data/index.json"
+    df_json.to_json(out_json, orient="records", force_ascii=False)
+    print(f"JSON {len(df_json)} 筆，已存至 {out_json}")
 
 
 if __name__ == "__main__":
