@@ -208,6 +208,13 @@ tbody td.center { text-align: center; }
     <div class="toolbar">
       <label>搜尋：</label>
       <input type="text" id="search-lo" placeholder="代號 / 股名">
+      <label style="margin-left:12px">股價上限：</label>
+      <select id="price-lo">
+        <option value="">50以下（全部）</option>
+        <option value="40">40以下</option>
+        <option value="30">30以下</option>
+        <option value="20">20以下</option>
+      </select>
       <label style="margin-left:12px">頻率：</label>
       <select id="freq-lo">
         <option value="">全部</option>
@@ -233,6 +240,12 @@ tbody td.center { text-align: center; }
     <div class="toolbar">
       <label>搜尋：</label>
       <input type="text" id="search-hi" placeholder="代號 / 股名">
+      <label style="margin-left:12px">股價下限：</label>
+      <select id="price-hi">
+        <option value="">50以上（全部）</option>
+        <option value="100">100以上</option>
+        <option value="200">200以上</option>
+      </select>
       <label style="margin-left:12px">頻率：</label>
       <select id="freq-hi">
         <option value="">全部</option>
@@ -432,14 +445,19 @@ function sortBy(tab, col) {
 
 // ── 篩選 ──
 function applyFilter(tab) {
-  const q    = document.getElementById(`search-${tab}`).value.trim().toLowerCase();
-  const freq = document.getElementById(`freq-${tab}`).value;
+  const q         = document.getElementById(`search-${tab}`).value.trim().toLowerCase();
+  const freq      = document.getElementById(`freq-${tab}`).value;
   const onlyStock = document.getElementById(`stock-${tab}`).checked;
+  const priceVal  = document.getElementById(`price-${tab}`)?.value;
+  const priceNum  = priceVal ? Number(priceVal) : null;
+
   const base = state[tab].baseData.filter(d => {
+    const price = d['成交'] ?? 0;
     const matchQ = !q || String(d['代號']).includes(q) || (d['名稱'] || '').toLowerCase().includes(q);
     const matchF = !freq || d['股利發放頻率'] === freq;
     const matchS = !onlyStock || (d['股票股利'] > 0);
-    return matchQ && matchF && matchS;
+    const matchP = priceNum === null || (tab === 'lo' ? price <= priceNum : price >= priceNum);
+    return matchQ && matchF && matchS && matchP;
   });
   state[tab].filtered = doSort(base, tab);
   renderTab(tab);
@@ -594,6 +612,7 @@ fetch('data/index.json')
 
       // 篩選事件
       document.getElementById(`search-${tab}`).addEventListener('input',  () => applyFilter(tab));
+      document.getElementById(`price-${tab}`).addEventListener('change',  () => applyFilter(tab));
       document.getElementById(`freq-${tab}`).addEventListener('change',   () => applyFilter(tab));
       document.getElementById(`stock-${tab}`).addEventListener('change',  () => applyFilter(tab));
     });
