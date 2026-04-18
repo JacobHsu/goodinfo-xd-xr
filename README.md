@@ -1,0 +1,1 @@
+# goodinfo-xd-xr
