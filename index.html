@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<title>股票股利排行 2025 – 四碼股票</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: Arial, "微軟正黑體", "Microsoft JhengHei", sans-serif;
+  font-size: 13px;
+  background: #f0f0f0;
+  color: #333;
+}
+
+/* ── 頂部標題列 ── */
+#topbar {
+  background: linear-gradient(to bottom, #4472c4, #2e5496);
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+#topbar h1 { font-size: 14px; font-weight: bold; color: #fff; white-space: nowrap; }
+#topbar .sep { color: #aac4f0; font-size: 12px; }
+#topbar .sub { color: #c8d8f8; font-size: 11px; }
+#topbar .price-meta { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+#refreshBtn {
+  padding: 3px 10px; font-size: 11px; cursor: pointer;
+  background: #f9a825; color: #1f3864; border: none;
+  border-radius: 3px; font-weight: bold;
+}
+#refreshBtn:hover { background: #ffc107; }
+#refreshBtn:disabled { background: #888; color: #ccc; cursor: default; }
+#priceStatus { font-size: 11px; color: #c8d8f8; }
+
+/* ── Tab 列 ── */
+#tabBar {
+  display: flex;
+  background: #1f3864;
+  border-bottom: 3px solid #f9a825;
+  padding: 0 8px;
+}
+.tab-btn {
+  padding: 7px 20px;
+  font-size: 13px;
+  font-weight: bold;
+  color: #a8c4e8;
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -3px;
+  transition: color .15s;
+}
+.tab-btn:hover { color: #fff; }
+.tab-btn.active {
+  color: #fff;
+  border-bottom: 3px solid #f9a825;
+  background: #17375e;
+}
+.tab-btn .badge {
+  display: inline-block;
+  margin-left: 6px;
+  background: #2e5496;
+  color: #c8d8f8;
+  font-size: 10px;
+  font-weight: normal;
+  padding: 1px 5px;
+  border-radius: 8px;
+}
+.tab-btn.active .badge { background: #f9a825; color: #1f3864; }
+
+/* ── 工具列 ── */
+.toolbar {
+  background: #dce6f1;
+  border-bottom: 1px solid #b8cce4;
+  padding: 5px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.toolbar label { font-size: 12px; color: #333; font-weight: bold; }
+.toolbar input[type=text] {
+  padding: 2px 6px;
+  font-size: 12px;
+  border: 1px solid #7f9fbf;
+  border-radius: 2px;
+  width: 120px;
+}
+.toolbar select { font-size: 12px; padding: 2px 4px; border: 1px solid #7f9fbf; }
+.toolbar .count { font-size: 12px; color: #555; margin-left: auto; }
+.toolbar .count b { color: #c00; }
+
+/* ── Tab panel ── */
+.tab-panel { display: none; padding: 8px; }
+.tab-panel.active { display: block; }
+
+/* ── 表格 ── */
+.tbl-wrap {
+  overflow-x: auto;
+  background: #fff;
+  border: 1px solid #b8cce4;
+  border-radius: 2px;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 11pt;
+  white-space: nowrap;
+}
+thead tr th {
+  background: #17375e;
+  color: #fff;
+  padding: 4px 6px;
+  text-align: center;
+  border-right: 1px solid #2e5496;
+  border-bottom: 2px solid #1f3864;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  cursor: pointer;
+  user-select: none;
+  font-size: 10pt;
+}
+thead tr th:hover { background: #2e5496; }
+thead tr th.sort-asc::after  { content: " ▲"; font-size: 9px; }
+thead tr th.sort-desc::after { content: " ▼"; font-size: 9px; }
+thead tr.subhead th {
+  background: #1f4e79;
+  font-size: 9.5pt;
+  padding: 3px 6px;
+  cursor: default;
+}
+thead tr.subhead th:hover { background: #1f4e79; }
+
+tbody tr { border-bottom: 1px solid #e0e8f0; }
+tbody tr:nth-child(odd)  { background: #fff; }
+tbody tr:nth-child(even) { background: #f5f9ff; }
+tbody tr:hover { background: #fffbcc !important; }
+tbody td {
+  padding: 3px 6px;
+  text-align: right;
+  border-right: 1px solid #e0e8f0;
+  font-size: 10pt;
+}
+tbody td.left   { text-align: left; }
+tbody td.center { text-align: center; }
+
+.code-link { color: #00529b; text-decoration: none; font-weight: bold; }
+.code-link:hover { text-decoration: underline; color: #c00; }
+.name-cell { text-align: left; min-width: 80px; }
+
+.up   { color: #cc0000; font-weight: bold; }
+.dn   { color: #008000; font-weight: bold; }
+.flat { color: #555; }
+.hi5  { color: #c00; font-weight: bold; }
+.hi3  { color: #c60; }
+.rank-cell { text-align: center; color: #777; width: 38px; }
+.na { color: #bbb; }
+
+.freq-tag { display: inline-block; padding: 1px 4px; border-radius: 2px; font-size: 9.5pt; font-weight: bold; }
+.freq-年  { background: #cce0ff; color: #003080; }
+.freq-半年 { background: #d5f0d5; color: #005000; }
+.freq-季  { background: #fff0cc; color: #804000; }
+
+/* ── 回頂 ── */
+#backTop {
+  position: fixed; bottom: 20px; right: 20px;
+  background: #17375e; color: #fff; border: none;
+  border-radius: 4px; padding: 6px 12px;
+  font-size: 13px; cursor: pointer;
+  display: none; z-index: 99; opacity: 0.85;
+}
+#backTop:hover { opacity: 1; }
+
+#loading { text-align: center; padding: 30px; color: #666; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <h1>股票股利排行 2025</h1>
+  <span class="sep">–</span>
+  <span class="sub">四碼股票 &nbsp;|&nbsp; 股利政策發放年度 &nbsp;|&nbsp; 股利分派與除權/息價殖利率</span>
+  <div class="price-meta">
+    <span id="priceStatus">股價載入中…</span>
+    <button id="refreshBtn" onclick="fetchPrices(true)" disabled>⟳ 更新報價</button>
+  </div>
+</div>
+
+<div id="loading">載入資料中…</div>
+
+<div id="appBody" style="display:none">
+  <div id="tabBar">
+    <button class="tab-btn active" onclick="switchTab('lo')">
+      50 元以下 <span class="badge" id="badge-lo">-</span>
+    </button>
+    <button class="tab-btn" onclick="switchTab('hi')">
+      50 元以上 <span class="badge" id="badge-hi">-</span>
+    </button>
+  </div>
+
+  <!-- Tab: 50元以下 -->
+  <div id="panel-lo" class="tab-panel active">
+    <div class="toolbar">
+      <label>搜尋：</label>
+      <input type="text" id="search-lo" placeholder="代號 / 股名">
+      <label style="margin-left:12px">頻率：</label>
+      <select id="freq-lo">
+        <option value="">全部</option>
+        <option value="年">年</option>
+        <option value="半年">半年</option>
+        <option value="季">季</option>
+      </select>
+      <label style="margin-left:12px">
+        <input type="checkbox" id="stock-lo"> 有除權
+      </label>
+      <div class="count">顯示 <b id="cnt-lo">0</b> 筆</div>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead id="thead-lo"></thead>
+        <tbody id="tbody-lo"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Tab: 50元以上 -->
+  <div id="panel-hi" class="tab-panel">
+    <div class="toolbar">
+      <label>搜尋：</label>
+      <input type="text" id="search-hi" placeholder="代號 / 股名">
+      <label style="margin-left:12px">頻率：</label>
+      <select id="freq-hi">
+        <option value="">全部</option>
+        <option value="年">年</option>
+        <option value="半年">半年</option>
+        <option value="季">季</option>
+      </select>
+      <label style="margin-left:12px">
+        <input type="checkbox" id="stock-hi"> 有除權
+      </label>
+      <div class="count">顯示 <b id="cnt-hi">0</b> 筆</div>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead id="thead-hi"></thead>
+        <tbody id="tbody-hi"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<button id="backTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">▲ 回頂</button>
+
+<script>
+const PRICE_CUT = 50;
+const CACHE_KEY = 'tw_prices_v1';
+const INTRADAY_TTL = 30 * 60 * 1000; // 盤中 30 分鐘
+
+function lastTradingDateLabel() {
+  const d = new Date();
+  // 開盤前（< 09:00）視同還沒有今天的資料，退回前一個交易日
+  if (d.getHours() < 9) d.setDate(d.getDate() - 1);
+  // 往回找最近的週一到週五
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1);
+  return `${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')}`;
+}
+
+function isTradingHours(d = new Date()) {
+  const day = d.getDay();                          // 0=日 6=六
+  if (day === 0 || day === 6) return false;
+  const hm = d.getHours() * 100 + d.getMinutes(); // 930, 1330
+  return hm >= 900 && hm < 1330;
+}
+
+function cacheExpired(ts) {
+  if (isTradingHours()) return Date.now() - ts > INTRADAY_TTL;
+  // 盤後/假日：快取到下一個交易日 09:00 前都有效
+  const next = nextTradingOpen();
+  return Date.now() >= next;
+}
+
+function nextTradingOpen() {
+  const d = new Date();
+  d.setHours(9, 0, 0, 0);
+  // 若今天 09:00 還沒到且今天是交易日，就是今天
+  if (d > new Date() && d.getDay() !== 0 && d.getDay() !== 6) return d.getTime();
+  // 否則往後找下一個週一到週五
+  do { d.setDate(d.getDate() + 1); } while (d.getDay() === 0 || d.getDay() === 6);
+  return d.getTime();
+}
+
+const NUM_COLS = new Set([
+  '排名','成交','漲跌價','漲跌幅',
+  '現金股利','股票股利','合計股利',
+  '除息價','除息價現金殖利率',
+  '除權價','除權價股票殖利率','除權息合計殖利率',
+]);
+
+let allData = [];  // 全部資料，兩個 tab 的 baseData 共享同一批物件參考
+
+// 各 tab 獨立狀態
+const state = {
+  lo: { baseData: [], filtered: [], sortCol: '除息價現金殖利率', sortDir: -1 },
+  hi: { baseData: [], filtered: [], sortCol: '除息價現金殖利率', sortDir: -1 },
+};
+let activeTab = 'lo';
+let priceDate = '';
+
+// ── 格式化工具 ──
+const fmt = (v, dec=2) => v == null ? '<span class="na">-</span>' : (+v).toFixed(dec);
+
+function changeColor(v) {
+  if (v == null) return '<span class="na">-</span>';
+  const n = +v;
+  if (n > 0) return `<span class="up">+${n.toFixed(2)}</span>`;
+  if (n < 0) return `<span class="dn">${n.toFixed(2)}</span>`;
+  return `<span class="flat">0.00</span>`;
+}
+
+function yieldColor(v) {
+  if (v == null) return '<span class="na">-</span>';
+  const n = +v;
+  if (n >= 5) return `<span class="hi5">${n.toFixed(2)}</span>`;
+  if (n >= 3) return `<span class="hi3">${n.toFixed(2)}</span>`;
+  return n.toFixed(2);
+}
+
+function freqTag(v) {
+  if (!v) return '';
+  return `<span class="freq-tag freq-${v}">${v}</span>`;
+}
+
+function fmtDate(v) {
+  if (!v) return '<span class="na">-</span>';
+  return String(v).replace(/^'/, '');
+}
+
+function buildRow(d) {
+  const chg = d['漲跌幅'];
+  const cls = chg > 0 ? 'up' : chg < 0 ? 'dn' : 'flat';
+  const link = `https://goodinfo.tw/tw/StockDetail.asp?STOCK_ID=${d['代號']}`;
+  return `<tr>
+    <td class="rank-cell">${d['排名']}</td>
+    <td class="center"><a class="code-link" href="${link}" target="_blank">${d['代號']}</a></td>
+    <td class="name-cell">${d['名稱'] || ''}</td>
+    <td>${fmt(d['成交'])}</td>
+    <td>${changeColor(d['漲跌價'])}</td>
+    <td><span class="${cls}">${chg != null ? (chg > 0 ? '+' : '') + (+chg).toFixed(2) + '%' : '-'}</span></td>
+    <td class="center">${freqTag(d['股利發放頻率'])}</td>
+    <td>${fmt(d['現金股利'])}</td>
+    <td>${fmt(d['股票股利'])}</td>
+    <td><b>${fmt(d['合計股利'])}</b></td>
+    <td>${fmt(d['除息價'])}</td>
+    <td>${yieldColor(d['除息價現金殖利率'])}</td>
+    <td>${fmt(d['除權價'])}</td>
+    <td>${yieldColor(d['除權價股票殖利率'])}</td>
+    <td><b>${yieldColor(d['除權息合計殖利率'])}</b></td>
+    <td class="center">${fmtDate(d['除息交易日'])}</td>
+    <td class="center">${fmtDate(d['除權交易日'])}</td>
+    <td class="center">${fmtDate(d['現金股利發放日'])}</td>
+  </tr>`;
+}
+
+function buildThead(tab) {
+  return `<tr>
+    <th rowspan="2" data-tab="${tab}" data-col="排名">排名</th>
+    <th rowspan="2" data-tab="${tab}" data-col="代號">代號</th>
+    <th rowspan="2" class="left" data-tab="${tab}" data-col="名稱">名稱</th>
+    <th colspan="3" id="price-date-${tab}">股價（${priceDate}）</th>
+    <th rowspan="2" data-tab="${tab}" data-col="股利發放頻率">頻率</th>
+    <th colspan="3">股利（元）</th>
+    <th colspan="2">除息</th>
+    <th colspan="2">除權</th>
+    <th rowspan="2" data-tab="${tab}" data-col="除權息合計殖利率" class="hi5">合計<br>殖利率%</th>
+    <th rowspan="2" data-tab="${tab}" data-col="除息交易日">除息日</th>
+    <th rowspan="2" data-tab="${tab}" data-col="除權交易日">除權日</th>
+    <th rowspan="2" data-tab="${tab}" data-col="現金股利發放日">發放日</th>
+  </tr>
+  <tr class="subhead">
+    <th data-tab="${tab}" data-col="成交">成交</th>
+    <th data-tab="${tab}" data-col="漲跌價">漲跌</th>
+    <th data-tab="${tab}" data-col="漲跌幅">漲跌%</th>
+    <th data-tab="${tab}" data-col="現金股利">現金</th>
+    <th data-tab="${tab}" data-col="股票股利">股票</th>
+    <th data-tab="${tab}" data-col="合計股利">合計</th>
+    <th data-tab="${tab}" data-col="除息價">除息價</th>
+    <th data-tab="${tab}" data-col="除息價現金殖利率">現金殖%</th>
+    <th data-tab="${tab}" data-col="除權價">除權價</th>
+    <th data-tab="${tab}" data-col="除權價股票殖利率">股票殖%</th>
+  </tr>`;
+}
+
+// ── 排序 ──
+function doSort(arr, tab) {
+  const { sortCol: col, sortDir: dir } = state[tab];
+  return [...arr].sort((a, b) => {
+    const va = a[col], vb = b[col];
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    if (NUM_COLS.has(col)) return (Number(va) - Number(vb)) * dir;
+    return String(va).localeCompare(String(vb), 'zh-Hant') * dir;
+  });
+}
+
+function updateSortHeader(tab) {
+  const { sortCol, sortDir } = state[tab];
+  document.querySelectorAll(`#thead-${tab} th[data-col]`).forEach(th => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (th.dataset.col === sortCol)
+      th.classList.add(sortDir === 1 ? 'sort-asc' : 'sort-desc');
+  });
+}
+
+function sortBy(tab, col) {
+  const s = state[tab];
+  if (s.sortCol === col) {
+    s.sortDir *= -1;
+  } else {
+    s.sortCol = col;
+    s.sortDir = NUM_COLS.has(col) ? -1 : 1;
+  }
+  s.filtered = doSort(s.filtered, tab);
+  updateSortHeader(tab);
+  renderTab(tab);
+}
+
+// ── 篩選 ──
+function applyFilter(tab) {
+  const q    = document.getElementById(`search-${tab}`).value.trim().toLowerCase();
+  const freq = document.getElementById(`freq-${tab}`).value;
+  const onlyStock = document.getElementById(`stock-${tab}`).checked;
+  const base = state[tab].baseData.filter(d => {
+    const matchQ = !q || String(d['代號']).includes(q) || (d['名稱'] || '').toLowerCase().includes(q);
+    const matchF = !freq || d['股利發放頻率'] === freq;
+    const matchS = !onlyStock || (d['股票股利'] > 0);
+    return matchQ && matchF && matchS;
+  });
+  state[tab].filtered = doSort(base, tab);
+  renderTab(tab);
+}
+
+// ── 渲染 ──
+function renderTab(tab) {
+  const { filtered } = state[tab];
+  document.getElementById(`tbody-${tab}`).innerHTML = filtered.map(buildRow).join('');
+  document.getElementById(`cnt-${tab}`).textContent = filtered.length;
+}
+
+// ── Tab 切換 ──
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', ['lo','hi'][i] === tab);
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(`panel-${tab}`).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+// ── 股價更新 ──
+function parseNum(s) {
+  if (s == null) return null;
+  const n = parseFloat(String(s).replace(/[^0-9.\-]/g, ''));
+  return isNaN(n) ? null : n;
+}
+
+async function fetchPrices(force = false) {
+  const btn = document.getElementById('refreshBtn');
+  const status = document.getElementById('priceStatus');
+
+  // 快取檢查
+  if (!force) {
+    try {
+      const cache = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+      if (cache && !cacheExpired(cache.ts)) {
+        applyPriceMap(cache.map);
+        const t = new Date(cache.ts);
+        const label = isTradingHours() ? '盤中快取' : '收盤';
+        status.textContent = `報價 ${t.getHours().toString().padStart(2,'0')}:${t.getMinutes().toString().padStart(2,'0')} (${label})`;
+        btn.disabled = false;
+        return;
+      }
+    } catch {}
+  }
+
+  btn.disabled = true;
+  status.textContent = '更新中…';
+
+  try {
+    const [twse, tpex] = await Promise.all([
+      fetch('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL').then(r => r.json()),
+      fetch('https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes').then(r => r.json()),
+    ]);
+
+    const map = {};
+
+    // TWSE：ClosingPrice, Change（字串如 "+0.50" / "-0.25" / "0.00"）
+    for (const row of twse) {
+      const code = String(row.Code || '').trim();
+      const price = parseNum(row.ClosingPrice);
+      const change = parseNum(row.Change);
+      if (code && price != null) {
+        const prev = price - (change ?? 0);
+        map[code] = {
+          price,
+          change: change ?? 0,
+          changePct: prev !== 0 ? +((change / prev) * 100).toFixed(2) : 0,
+        };
+      }
+    }
+
+    // TPEX：Close, Change
+    for (const row of tpex) {
+      const code = String(row.SecuritiesCompanyCode || row.Code || '').trim();
+      const price = parseNum(row.Close);
+      const change = parseNum(row.Change);
+      if (code && price != null) {
+        const prev = price - (change ?? 0);
+        map[code] = {
+          price,
+          change: change ?? 0,
+          changePct: prev !== 0 ? +((change / prev) * 100).toFixed(2) : 0,
+        };
+      }
+    }
+
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), map }));
+    applyPriceMap(map);
+
+    const now = new Date();
+    const label = isTradingHours() ? '盤中' : '收盤';
+    status.textContent = `報價更新 ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')} (${label})`;
+  } catch (e) {
+    status.textContent = `更新失敗：${e.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function applyPriceMap(map) {
+  // 原地更新 allData（lo/hi baseData 共享同一批物件，所以同步更新）
+  for (const d of allData) {
+    const p = map[d['代號']];
+    if (!p) continue;
+    d['成交']  = p.price;
+    d['漲跌價'] = p.change;
+    d['漲跌幅'] = p.changePct;
+  }
+  // 重繪兩個 tab（保留現有篩選排序）
+  const dateLabel = lastTradingDateLabel();
+  ['lo', 'hi'].forEach(tab => {
+    applyFilter(tab);
+    const th = document.getElementById(`price-date-${tab}`);
+    if (th) th.textContent = `股價（${dateLabel}）`;
+  });
+}
+
+// ── 初始化 ──
+fetch('data/stock_dividend_2025_4digit.json')
+  .then(r => r.json())
+  .then(data => {
+    allData = data;
+    const d0 = data.find(d => d['股價日期']);
+    priceDate = d0 ? d0['股價日期'] : '';
+
+    state.lo.baseData = data.filter(d => (d['成交'] ?? 0) < PRICE_CUT);
+    state.hi.baseData = data.filter(d => (d['成交'] ?? 0) >= PRICE_CUT);
+
+    // Badge 筆數
+    document.getElementById('badge-lo').textContent = state.lo.baseData.length;
+    document.getElementById('badge-hi').textContent = state.hi.baseData.length;
+
+    // 建 thead
+    document.getElementById('thead-lo').innerHTML = buildThead('lo');
+    document.getElementById('thead-hi').innerHTML = buildThead('hi');
+
+    // 初始排序 + 渲染
+    ['lo', 'hi'].forEach(tab => {
+      state[tab].filtered = doSort([...state[tab].baseData], tab);
+      renderTab(tab);
+      updateSortHeader(tab);
+
+      // 排序點擊
+      document.querySelectorAll(`#thead-${tab} th[data-col]`).forEach(th => {
+        if (!th.closest('tr.subhead') || th.dataset.col)
+          th.addEventListener('click', () => sortBy(tab, th.dataset.col));
+      });
+
+      // 篩選事件
+      document.getElementById(`search-${tab}`).addEventListener('input',  () => applyFilter(tab));
+      document.getElementById(`freq-${tab}`).addEventListener('change',   () => applyFilter(tab));
+      document.getElementById(`stock-${tab}`).addEventListener('change',  () => applyFilter(tab));
+    });
+
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('appBody').style.display = '';
+
+    // 自動抓最新報價（有快取就用快取，否則打 API）
+    fetchPrices(false);
+
+    window.addEventListener('scroll', () => {
+      document.getElementById('backTop').style.display = window.scrollY > 300 ? '' : 'none';
+    });
+  })
+  .catch(e => {
+    document.getElementById('loading').textContent = '載入失敗：' + e.message;
+  });
+</script>
+</body>
+</html>
