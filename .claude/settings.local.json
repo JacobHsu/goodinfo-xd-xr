@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ' *)",
+      "Bash(python fetch_stock_dividend.py --json-only)",
+      "Bash(python -c \"import sys; print\\(sys.stdin.read\\(\\)\\)\")",
+      "Bash(python -c \"import json, sys; sys.stdout.reconfigure\\(encoding='utf-8'\\); data=json.load\\(open\\('data/index.json',encoding='utf-8'\\)\\); print\\(list\\(data[0].keys\\(\\)\\)\\)\")",
+      "Bash(python -c \"import json, sys; sys.stdout.reconfigure\\(encoding='utf-8'\\); data=json.load\\(open\\('data/index.json',encoding='utf-8'\\)\\); print\\('EPS' in data[0].keys\\(\\), list\\(data[0].keys\\(\\)\\)\\)\")",
+      "Bash(python -c \"import pandas as pd, sys; sys.stdout.reconfigure\\(encoding='utf-8'\\); df=pd.read_csv\\('data/stock_dividend_2025_4digit.csv',encoding='utf-8-sig',nrows=1\\); print\\(list\\(df.columns\\)\\)\")",
+      "Bash(python -c \"import pandas as pd, sys; sys.stdout.reconfigure\\(encoding='utf-8'\\); df=pd.read_csv\\('data/stock_roe.csv',encoding='utf-8-sig',nrows=3\\); print\\(list\\(df.columns\\)\\); print\\(df.to_string\\(\\)\\)\")",
+      "Bash(python -c \"import sys; [print\\(l.strip\\(\\)\\) for l in sys.stdin]\")",
+      "Bash(python -c \"import sys; sys.stdout.reconfigure\\(encoding='utf-8'\\); print\\(sys.stdin.read\\(\\)\\)\")",
+      "Bash(python -c \"import json,sys; sys.stdout.reconfigure\\(encoding='utf-8'\\); d=json.loads\\(sys.stdin.read\\(\\)\\); print\\(list\\(d[0].keys\\(\\)\\)\\)\")"
+    ]
+  }
+}

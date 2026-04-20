@@ -160,6 +160,9 @@ def build_json(year: str) -> None:
         return
 
     df = pd.read_csv(csv_4digit, encoding="utf-8-sig")
+    dr_count = df["名稱"].str.contains(r"-DR", na=False).sum()
+    df = df[~df["名稱"].str.contains(r"-DR", na=False)].copy()
+    print(f"排除 DR 存託憑證 {dr_count} 筆，剩 {len(df)} 筆")
 
     # 排除當年未發股利
     df["合計股利"] = pd.to_numeric(df["合計股利"], errors="coerce").fillna(0)
@@ -192,6 +195,49 @@ def build_json(year: str) -> None:
     for col in num_cols:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    df["代號"] = df["代號"].astype(str)
+
+    # Join ROE 與財報評分
+    roe_csv = "data/stock_roe.csv"
+    if os.path.exists(roe_csv):
+        df_roe = pd.read_csv(roe_csv, encoding="utf-8-sig")[["代號", "ROE(%)", "財報評分"]]
+        df_roe["代號"] = df_roe["代號"].astype(str)
+        df_roe["ROE(%)"] = pd.to_numeric(df_roe["ROE(%)"], errors="coerce")
+        df_roe["財報評分"] = pd.to_numeric(df_roe["財報評分"], errors="coerce")
+        df = df.merge(df_roe, on="代號", how="left")
+        print(f"Join ROE：{df['ROE(%)'].notna().sum()}/{len(df)} 筆有資料")
+    else:
+        print(f"找不到 {roe_csv}，跳過 ROE join")
+
+    # Join EPS
+    eps_csv = "data/stock_eps.csv"
+    if os.path.exists(eps_csv):
+        df_eps = pd.read_csv(eps_csv, encoding="utf-8-sig")[["代號", "EPS(元)"]]
+        df_eps["代號"] = df_eps["代號"].astype(str)
+        df_eps = df_eps.rename(columns={"EPS(元)": "EPS"})
+        df_eps["EPS"] = pd.to_numeric(df_eps["EPS"], errors="coerce")
+        df = df.merge(df_eps, on="代號", how="left")
+        print(f"Join EPS：{df['EPS'].notna().sum()}/{len(df)} 筆有資料")
+    else:
+        print(f"找不到 {eps_csv}，跳過 EPS join")
+
+    # Join 紀念品
+    gifts_tsv = "data/stock_gifts_2025.tsv"
+    if os.path.exists(gifts_tsv):
+        df_gifts = pd.read_csv(gifts_tsv, encoding="utf-8", sep="\t", on_bad_lines="skip")[["股號", "紀念品"]]
+        df_gifts = df_gifts.rename(columns={"股號": "代號"})
+        df_gifts["代號"] = df_gifts["代號"].astype(str)
+        df_gifts = df_gifts.groupby("代號")["紀念品"].apply(lambda x: "、".join(x.dropna().unique())).reset_index()
+        df = df.merge(df_gifts, on="代號", how="left")
+        print(f"Join 紀念品：{df['紀念品'].notna().sum()}/{len(df)} 筆有資料")
+    else:
+        print(f"找不到 {gifts_tsv}，跳過紀念品 join")
+
+    # 排除 EPS 或 ROE 為負值
+    before = len(df)
+    df = df[~((df["EPS"] < 0) | (df["ROE(%)"] < 0))].copy()
+    print(f"排除 EPS/ROE 負值 {before - len(df)} 檔，剩 {len(df)} 筆")
 
     # 依殖利率降冪重排，排名重設為 1..N
     df = df.sort_values("除權息合計殖利率", ascending=False).reset_index(drop=True)
@@ -245,6 +291,7 @@ def main():
     print(f"\n完成！共 {len(df)} 筆，已存至 {out_all}")
 
     df_4digit = df[df["代號"].astype(str).str.match(r"^\d{4}$")].copy()
+    df_4digit = df_4digit[~df_4digit["名稱"].str.contains(r"-DR", na=False)].copy()
     df_4digit.to_csv(out_4digit, index=False, encoding="utf-8-sig")
     print(f"四碼股票 {len(df_4digit)} 筆，已存至 {out_4digit}")
 

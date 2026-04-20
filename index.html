@@ -319,6 +319,7 @@ const NUM_COLS = new Set([
   '現金股利','股票股利','合計股利',
   '除息價','除息價現金殖利率',
   '除權價','除權價股票殖利率','除權息合計殖利率',
+  'ROE(%)','財報評分',
 ]);
 
 let allData = [];  // 全部資料，兩個 tab 的 baseData 共享同一批物件參考
@@ -384,6 +385,8 @@ function buildRow(d) {
     <td class="center">${fmtDate(d['除權交易日'])}</td>
     <td class="center">${fmtDate(d['現金股利發放日'])}</td>
     <td class="center">${d['EPS'] != null ? (+d['EPS']).toFixed(2) : '-'}</td>
+    <td class="center">${d['ROE(%)'] != null ? (+d['ROE(%)']).toFixed(1) + '%' : '<span class="na">-</span>'}</td>
+    <td class="center">${d['財報評分'] != null ? +d['財報評分'] : '<span class="na">-</span>'}</td>
     <td class="left">${d['紀念品'] || '-'}</td>
   </tr>`;
 }
@@ -403,6 +406,8 @@ function buildThead(tab) {
     <th rowspan="2" data-tab="${tab}" data-col="除權交易日">除權日</th>
     <th rowspan="2" data-tab="${tab}" data-col="現金股利發放日">發放日</th>
     <th rowspan="2" data-tab="${tab}" data-col="EPS">EPS</th>
+    <th rowspan="2" data-tab="${tab}" data-col="ROE(%)">ROE%</th>
+    <th rowspan="2" data-tab="${tab}" data-col="財報評分">財報<br>評分</th>
     <th rowspan="2" data-tab="${tab}" data-col="紀念品" class="left">紀念品</th>
   </tr>
   <tr class="subhead">
