@@ -222,6 +222,18 @@ def build_json(year: str) -> None:
     else:
         print(f"找不到 {eps_csv}，跳過 EPS join")
 
+    # Join OI（平均營業利益）
+    oi_csv = "data/stock_operating_profit.csv"
+    if os.path.exists(oi_csv):
+        df_oi = pd.read_csv(oi_csv, encoding="utf-8-sig")[["代號", "平均營益(億)"]]
+        df_oi["代號"] = df_oi["代號"].astype(str)
+        df_oi = df_oi.rename(columns={"平均營益(億)": "OI(億)"})
+        df_oi["OI(億)"] = pd.to_numeric(df_oi["OI(億)"], errors="coerce")
+        df = df.merge(df_oi, on="代號", how="left")
+        print(f"Join OI：{df['OI(億)'].notna().sum()}/{len(df)} 筆有資料")
+    else:
+        print(f"找不到 {oi_csv}，跳過 OI join")
+
     # Join 紀念品
     gifts_tsv = "data/stock_gifts_2025.tsv"
     if os.path.exists(gifts_tsv):
@@ -238,6 +250,12 @@ def build_json(year: str) -> None:
     before = len(df)
     df = df[~((df["EPS"] < 0) | (df["ROE(%)"] < 0))].copy()
     print(f"排除 EPS/ROE 負值 {before - len(df)} 檔，剩 {len(df)} 筆")
+
+    # 排除 OI 為負值（本業虧損，股利不可持續）
+    if "OI(億)" in df.columns:
+        before = len(df)
+        df = df[~(df["OI(億)"] < 0)].copy()
+        print(f"排除 OI 負值 {before - len(df)} 檔，剩 {len(df)} 筆")
 
     # 依殖利率降冪重排，排名重設為 1..N
     df = df.sort_values("除權息合計殖利率", ascending=False).reset_index(drop=True)

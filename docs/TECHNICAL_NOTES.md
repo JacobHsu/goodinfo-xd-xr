@@ -255,6 +255,26 @@ onchange="ReloadStockList('...&RANK='+encodeURIComponent(selRANK.value))"
 
 ---
 
+## index.json 過濾規則（build_json）
+
+`build_json()` 依序套用下列排除條件：
+
+| 步驟 | 條件 | 原因 |
+|------|------|------|
+| 1 | 排除名稱含 `-DR`（存託憑證） | 非一般股票 |
+| 2 | 排除當年合計股利 = 0 | 無配息 |
+| 3 | 排除除權息合計殖利率 < 1% | 殖利率過低 |
+| 4 | 排除前一年合計股利 = 0 | 配息不穩定 |
+| 5 | Join `stock_roe.csv` → `ROE(%)`、`財報評分` | — |
+| 6 | Join `stock_eps.csv` → `EPS` | — |
+| 7 | Join `stock_operating_profit.csv` → `OI(億)` | — |
+| 8 | Join `stock_gifts_2025.tsv` → `紀念品` | — |
+| 9 | 排除 EPS < 0 或 ROE(%) < 0 | 當年虧損 |
+| 10 | 排除 OI(億) < 0 | 本業虧損，股利不可持續 |
+| 11 | 依 `除權息合計殖利率` 降冪排序，重設排名 | — |
+
+---
+
 ## 注意事項
 
 - **請求間隔**：每頁隨機延遲 3~5 秒，避免對伺服器造成壓力

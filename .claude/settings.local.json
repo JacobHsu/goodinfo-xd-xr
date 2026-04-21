@@ -14,7 +14,8 @@
       "Bash(python -c \"import json; d=json.load\\(open\\('data/index.json'\\)\\); keys=list\\(d.keys\\(\\)\\)[:5]; print\\(keys\\); first=list\\(d.values\\(\\)\\)[0]; print\\(type\\(first\\), list\\(first.keys\\(\\)\\) if isinstance\\(first, dict\\) else first[:2] if isinstance\\(first, list\\) else first\\)\")",
       "Bash(python update_prices.py)",
       "Bash(curl -s \"https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL\")",
-      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('Keys:', list\\(d[0].keys\\(\\)\\)\\); print\\('Sample:', d[0]\\)\")"
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('Keys:', list\\(d[0].keys\\(\\)\\)\\); print\\('Sample:', d[0]\\)\")",
+      "Bash(python fetch_stock_operating_profit.py)"
     ]
   }
 }
