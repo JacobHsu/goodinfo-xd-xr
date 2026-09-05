@@ -1,9 +1,11 @@
 import argparse
+import json
+import os
 import re
 import time
 import random
-import requests
 from bs4 import BeautifulSoup
+from curl_cffi import requests as cf_requests
 import pandas as pd
 from urllib.parse import urlencode
 
@@ -44,41 +46,60 @@ HEADERS = {
     "Referer": BASE_URL,
 }
 
-TZ_OFFSET = -480
+def solve_cloudflare(year: str, timeout: int = 180) -> tuple[dict, str, str]:
+    """開一個有畫面的 Chrome（undetected_chromedriver）通過 Cloudflare JS 驗證，
+    取得 cf_clearance 等 cookie，並回傳驗證頁本身的 HTML（即 RANK=0 那一頁）。
+
+    若跳出需要手動點擊的驗證方塊，視窗會保持開啟，請直接在畫面上完成即可，
+    腳本會持續等待直到 timeout 秒。
+    """
+    import undetected_chromedriver as uc
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+
+    params = make_common_params(year)
+    params["RANK_RANGE"] = "300"
+    url = BASE_URL + "?" + urlencode(params)
+
+    opts = uc.ChromeOptions()
+    opts.add_argument("--lang=zh-TW")
+    driver = uc.Chrome(options=opts, headless=False)
+    try:
+        driver.get(url)
+        print("等待 Cloudflare 驗證通過...（若跳出驗證方塊，請於視窗中手動完成）")
+        WebDriverWait(driver, timeout).until(
+            lambda d: "稍候" not in d.title and "Just a moment" not in d.title
+        )
+        WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.ID, "tblStockList")))
+        html = driver.page_source
+        user_agent = driver.execute_script("return navigator.userAgent")
+        cookies = {c["name"]: c["value"] for c in driver.get_cookies()}
+        return cookies, user_agent, html
+    finally:
+        try:
+            driver.quit()
+        except Exception:
+            pass
 
 
-def make_client_key() -> str:
-    ts = time.time() * 1000 / 86400000 - TZ_OFFSET / 1440
-    return f"2.3|43100.1033238637|46433.436657197|{TZ_OFFSET}|{ts}|{ts}"
-
-
-def init_session(year: str = "2025") -> tuple[requests.Session, str]:
-    session = requests.Session()
+def init_session(cookies: dict, user_agent: str) -> cf_requests.Session:
+    """用驗證頁取得的 cookie + User-Agent 建立 session，供後續分頁請求重複使用。"""
+    session = cf_requests.Session(impersonate="chrome")
     session.headers.update(HEADERS)
-
-    # Load main page to trigger cookie handshake and get REINIT
-    init_params = make_common_params(year)
-    init_params["RANK_RANGE"] = "300"
-    r = session.get(BASE_URL + "?" + urlencode(init_params), timeout=30)
-    r.encoding = "utf-8"
-
-    m = re.search(r"REINIT=([0-9.]+)", r.text)
-    reinit = m.group(1) if m else ""
-    session.cookies.set("CLIENT_KEY", make_client_key(), domain="goodinfo.tw", path="/")
-    return session, reinit
+    session.headers["User-Agent"] = user_agent
+    session.cookies.update(cookies)
+    return session
 
 
-def fetch_rank_page(session: requests.Session, reinit: str, rank_idx: int, year: str = "2025") -> str:
+def fetch_rank_page(session: cf_requests.Session, rank_idx: int, year: str = "2025") -> str:
     params = make_common_params(year)
     params["STEP"] = "DATA"
     params["RANK"] = str(rank_idx)
-    if reinit:
-        params["REINIT"] = reinit
 
     url = BASE_URL + "?" + urlencode(params)
     time.sleep(random.uniform(3.0, 5.0))
     r = session.get(url, timeout=30)
-    r.encoding = "utf-8"
     r.raise_for_status()
     return r.text
 
@@ -138,9 +159,9 @@ def parse_table(html: str) -> list[dict]:
     return rows
 
 
-def detect_total_pages(session: requests.Session, reinit: str) -> int:
+def detect_total_pages(session: cf_requests.Session, year: str = "2025") -> int:
     """Check RANK=0 page to read selRANK options and determine total pages."""
-    html = fetch_rank_page(session, reinit, 0)
+    html = fetch_rank_page(session, 0, year)
     soup = BeautifulSoup(html, "lxml")
     sel = soup.find("select", id="selRANK")
     if sel:
@@ -149,8 +170,22 @@ def detect_total_pages(session: requests.Session, reinit: str) -> int:
     return len(RANK_LABELS)
 
 
+def update_years_manifest(year: str) -> list[str]:
+    """更新 data/years.json，記錄目前有哪些年度的 index_<year>.json 可供網頁切換。"""
+    years_file = "data/years.json"
+    years: list[str] = []
+    if os.path.exists(years_file):
+        try:
+            years = json.load(open(years_file, encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            years = []
+    years_sorted = sorted({str(y) for y in years} | {str(year)}, key=int, reverse=True)
+    with open(years_file, "w", encoding="utf-8") as fp:
+        json.dump(years_sorted, fp, ensure_ascii=False)
+    return years_sorted
+
+
 def build_json(year: str) -> None:
-    import os
     prev_year = str(int(year) - 1)
     csv_4digit = f"data/stock_dividend_{year}_4digit.csv"
     prev_csv   = f"data/stock_dividend_{prev_year}_4digit.csv"
@@ -261,9 +296,10 @@ def build_json(year: str) -> None:
     df = df.sort_values("除權息合計殖利率", ascending=False).reset_index(drop=True)
     df["排名"] = df.index + 1
 
-    out_json = "data/index.json"
+    out_json = f"data/index_{year}.json"
     df.to_json(out_json, orient="records", force_ascii=False)
     print(f"JSON {len(df)} 筆，已存至 {out_json}")
+    update_years_manifest(year)
 
 
 def main():
@@ -277,15 +313,22 @@ def main():
         build_json(year)
         return
 
-    print(f"初始化 session（年度：{year}）...")
-    session, reinit = init_session(year)
-    print(f"REINIT: {reinit}")
+    print(f"啟動瀏覽器並通過 Cloudflare 驗證（年度：{year}）...")
+    cookies, user_agent, first_html = solve_cloudflare(year)
+    print("驗證通過，建立 session...")
+    session = init_session(cookies, user_agent)
 
     all_rows: list[dict] = []
 
-    for rank_idx, label in RANK_LABELS.items():
+    first_rows = parse_table(first_html)
+    print(f"取得排名 {RANK_LABELS[0]}（RANK=0，隨驗證頁一併取得）...")
+    print(f"  取得 {len(first_rows)} 筆")
+    all_rows.extend(first_rows)
+
+    for rank_idx in range(1, len(RANK_LABELS)):
+        label = RANK_LABELS[rank_idx]
         print(f"取得排名 {label}（RANK={rank_idx}）...")
-        html = fetch_rank_page(session, reinit, rank_idx, year)
+        html = fetch_rank_page(session, rank_idx, year)
         rows = parse_table(html)
         print(f"  取得 {len(rows)} 筆")
         all_rows.extend(rows)
@@ -298,7 +341,6 @@ def main():
         print("未取得任何資料")
         return
 
-    import os
     os.makedirs("data", exist_ok=True)
 
     df = pd.DataFrame(all_rows)
@@ -334,9 +376,10 @@ def main():
         if col in df_json.columns:
             df_json[col] = pd.to_numeric(df_json[col], errors="coerce")
 
-    out_json = "data/index.json"
+    out_json = f"data/index_{year}.json"
     df_json.to_json(out_json, orient="records", force_ascii=False)
     print(f"JSON {len(df_json)} 筆，已存至 {out_json}")
+    update_years_manifest(year)
 
 
 if __name__ == "__main__":

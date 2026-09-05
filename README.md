@@ -5,7 +5,8 @@
 ## 功能
 
 - **資料爬蟲** (`fetch_stock_dividend.py`)：批次抓取 Goodinfo 股利排行（共約 2,295 支），輸出 CSV 與 JSON
-- **互動網頁** (`index.html`)：讀取 `data/index.json`，依股價 50 元分成兩個 Tab，支援：
+- **互動網頁** (`index.html`)：讀取 `data/index_<year>.json`，依股價 50 元分成兩個 Tab，支援：
+  - 年度切換（右上角下拉選單，資料來自 `data/years.json`）
   - 欄位排序（點擊表頭）
   - 代號 / 股名搜尋
   - 股利發放頻率篩選（年 / 半年 / 季）
@@ -17,16 +18,21 @@
 ### 1. 安裝相依套件
 
 ```bash
-pip install requests beautifulsoup4 lxml pandas
+pip install beautifulsoup4 lxml pandas curl_cffi undetected-chromedriver selenium
 ```
+
+> Goodinfo 目前在爬蟲防護前多加了一層 Cloudflare JS 驗證，純 `requests` 已無法通過。
+> 爬蟲改用 `undetected_chromedriver` 開一個**有畫面**的 Chrome 通過驗證（過程全自動，
+> 通常不需要手動操作），拿到 `cf_clearance` cookie 後再用 `curl_cffi` 模擬瀏覽器
+> 快速抓完剩下的分頁。因此執行爬蟲時本機需要能跳出瀏覽器視窗，不能在純 headless / 無顯示的環境執行。
 
 ### 2. 抓取兩年股利資料
 
 先抓前一年（用來過濾），再抓當年：
 
 ```bash
-python fetch_stock_dividend.py --year 2024
 python fetch_stock_dividend.py --year 2025
+python fetch_stock_dividend.py --year 2026
 ```
 
 輸出至 `data/` 目錄（每個年度各一組）：
@@ -39,12 +45,13 @@ python fetch_stock_dividend.py --year 2025
 ### 3. 產生網頁用 JSON
 
 ```bash
-python fetch_stock_dividend.py --year 2025 --json-only
+python fetch_stock_dividend.py --year 2026 --json-only
 ```
 
-邏輯：從 2025 四碼資料中，排除 2024 年合計股利為 0 的股票，輸出至 `data/index.json`（約 1,489 筆）。
+邏輯：從 2026 四碼資料中，排除 2025 年合計股利為 0 的股票，輸出至 `data/index_2026.json`，
+並更新 `data/years.json`（記錄目前有哪些年度可在網頁上切換）。
 
-> 若 `data/stock_dividend_2024_4digit.csv` 不存在，則不做過濾直接輸出。
+> 若 `data/stock_dividend_2025_4digit.csv` 不存在，則不做過濾直接輸出。
 
 ### 4. 開啟網頁
 
@@ -55,26 +62,31 @@ python -m http.server 8080
 # 瀏覽 http://localhost:8080
 ```
 
+網頁預設載入 `data/years.json` 中最新的年度，右上角下拉選單可切換其他已抓取的年度。
+
 ## 專案結構
 
 ```
 goodinfo-xd-xr/
 ├── fetch_stock_dividend.py     # 爬蟲 + JSON 產生腳本
+├── update_prices.py            # 每週更新所有 index_<year>.json 的即時股價
 ├── index.html                  # 前端瀏覽器
-├── TECHNICAL_NOTES.md          # 爬蟲逆向工程筆記與踩坑記錄
+├── docs/TECHNICAL_NOTES.md     # 爬蟲逆向工程筆記與踩坑記錄
 └── data/
-    ├── stock_dividend_2024.csv
-    ├── stock_dividend_2024_4digit.csv
     ├── stock_dividend_2025.csv
     ├── stock_dividend_2025_4digit.csv
-    ├── index.json              # 網頁資料來源（兩年均有發股利）
-    └── new_dividend_2025.csv   # 2024 未發、2025 重新發股利名單
+    ├── stock_dividend_2026.csv
+    ├── stock_dividend_2026_4digit.csv
+    ├── index_2025.json         # 2025 年度網頁資料（兩年均有發股利）
+    ├── index_2026.json         # 2026 年度網頁資料
+    └── years.json              # 網頁年度下拉選單的可選年度清單
 ```
 
 ## 注意事項
 
 - 爬蟲每頁請求間隔 3～5 秒，請勿縮短以避免對伺服器造成負擔
-- `SHEET` 必須用 `股利政策發放年度`（不帶 `_去年`），`RPT_TIME` 才能正確切換年度，詳見 `TECHNICAL_NOTES.md`
+- `SHEET` 必須用 `股利政策發放年度`（不帶 `_去年`），`RPT_TIME` 才能正確切換年度，詳見 `docs/TECHNICAL_NOTES.md`
+- Goodinfo 前面掛了 Cloudflare JS 驗證，爬蟲需要能開啟有畫面的 Chrome（見上方安裝說明）
 - 資料來源為 [Goodinfo 台灣股市資訊網](https://goodinfo.tw)，僅供個人學習參考
 - 即時報價來自 [TWSE Open API](https://openapi.twse.com.tw) 及 [TPEX Open API](https://www.tpex.org.tw/openapi)
 

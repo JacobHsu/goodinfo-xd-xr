@@ -255,6 +255,50 @@ onchange="ReloadStockList('...&RANK='+encodeURIComponent(selRANK.value))"
 
 ---
 
+### 問題四：Cloudflare JS 驗證擋掉所有直連請求（2026 新增）
+
+**現象**：2026-09 起，`init_session()` 原本的 `requests` + 手動計算 `CLIENT_KEY` 做法全面失效，
+所有請求（含 `curl_cffi` 模擬 Chrome TLS 指紋）都收到 403，回應是一頁
+`Just a moment...`（Cloudflare 的 JS Challenge 頁面），不再是 Goodinfo 自家的驗證頁。
+
+**原因**：Goodinfo 在自家的 `CLIENT_KEY` cookie 機制之外，又在最前面加了一層 Cloudflare
+反爬蟲，純 Python（不執行 JS）無法算出 Cloudflare 要求的 `cf_clearance` cookie。
+
+**嘗試失敗的方法**：
+| 嘗試 | 結果 |
+|------|------|
+| 原本的 `requests` + 手動 `CLIENT_KEY` | 403，`Just a moment...` |
+| `curl_cffi`（模擬 Chrome TLS 指紋）直連 | 403，同樣的 Cloudflare 頁 |
+| Playwright 開 Chromium/Chrome（含有畫面模式） | Cloudflare 偵測到自動化控制旗標，驗證方塊永遠卡住、需要人一直重複點擊 |
+
+**破解方式**：
+
+改用 `undetected_chromedriver`（對 Selenium/CDP 的自動化特徵做了修補，Cloudflare 偵測不出來）
+開一個**有畫面**的 Chrome：
+
+1. `solve_cloudflare(year)` 用 `undetected_chromedriver` 開瀏覽器導向初始頁 URL
+   （帶 `RANK_RANGE=300`，不帶 `STEP=DATA`），實測**全自動通過、無需人工點擊**（~0～2 秒）
+2. 通過驗證後，該頁本身就內嵌了 RANK=0（前 300 筆）的完整資料表格 `<table id="tblStockList">`，
+   直接用既有的 `parse_table()` 解析即可，不用再多打一次請求
+3. 用 `driver.get_cookies()` 取出瀏覽器的完整 cookie（含 `cf_clearance`、`CLIENT_KEY` 等），
+   以及 `navigator.userAgent`
+4. 關閉瀏覽器後，改用 `curl_cffi`（`impersonate="chrome"`）建立 session，帶入上述 cookie 與
+   User-Agent，對 RANK=1~7 直接發 `STEP=DATA&RANK=N` 的 AJAX 請求 —— 驗證成功一次後，
+   剩下的分頁完全不需要瀏覽器，速度跟原本的 `requests` 版本一樣快
+
+**誤導點**：
+- Cloudflare 卡的不是「有沒有算對 cookie」，而是「有沒有自動化控制特徵」——一般
+  Playwright/Selenium 預設都會被偵測到，方塊永遠不會通過
+- `REINIT` 參數在新版頁面的 `ReloadStockList()` 已經不再附帶，新流程完全不需要它
+- `cf_clearance` 通過一次後可以在同一組 cookie + 對應 User-Agent 下重複使用，換頁不需要
+  每次都重開瀏覽器
+
+**限制**：`undetected_chromedriver` 在 `headless=True`/`--headless=new` 模式下驗證會卡住不過
+（實測會停在 `請稍候...`），因此爬蟲必須在能開啟瀏覽器視窗的環境執行，不能用在純 headless
+的 CI 環境（例如目前 GitHub Actions 只用來跑 `update_prices.py` 更新報價，沒有排程執行整個股利爬蟲）。
+
+---
+
 ## index.json 過濾規則（build_json）
 
 `build_json()` 依序套用下列排除條件：
@@ -278,6 +322,8 @@ onchange="ReloadStockList('...&RANK='+encodeURIComponent(selRANK.value))"
 ## 注意事項
 
 - **請求間隔**：每頁隨機延遲 3~5 秒，避免對伺服器造成壓力
-- **REINIT 時效**：`REINIT` 為當日時間戳，跨日重新執行需重新 init_session
-- **年度切換**：透過 `--year <年份>` 指定年度（如 `--year 2024`），預設 2025。`SHEET` 必須用 `股利政策發放年度`（不帶 `_去年`），`RPT_TIME` 才會生效
-- **編碼**：回應為 UTF-8，但 HTTP header 沒有 charset，需手動設定 `resp.encoding = 'utf-8'`；輸出 CSV 使用 `utf-8-sig`（帶 BOM），Excel 可直接正確開啟
+- **Cloudflare 驗證**：`solve_cloudflare()` 需要能開啟有畫面的 Chrome，詳見上方「問題四」
+- **cookie 時效**：`cf_clearance` 通常可用一段時間，但過期後需要重新執行整支腳本觸發 `solve_cloudflare()` 重新驗證
+- **年度切換**：透過 `--year <年份>` 指定年度（如 `--year 2026`），預設 2025。`SHEET` 必須用 `股利政策發放年度`（不帶 `_去年`），`RPT_TIME` 才會生效
+- **編碼**：`curl_cffi` 會自動判斷為 UTF-8，中文欄位可直接正確解析；輸出 CSV 使用 `utf-8-sig`（帶 BOM），Excel 可直接正確開啟
+- **多年度網頁資料**：`build_json()` 輸出到 `data/index_<year>.json`（而非單一 `data/index.json`），並維護 `data/years.json` 供前端年度下拉選單使用

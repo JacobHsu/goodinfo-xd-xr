@@ -1,10 +1,11 @@
 # 更新報價的備援：每週從 TPEX（上櫃）與 TWSE（上市）Open API 抓取收盤價，
-# 反查 index.json 的股票代號並更新成交價與股價日期，
-# 供前端在 TPEX API 失敗時使用 index.json 作為靜態備援資料源。
+# 反查 data/index_<year>.json（每個年度一份）的股票代號並更新成交價與股價日期，
+# 供前端在 TPEX API 失敗時使用 index_<year>.json 作為靜態備援資料源。
 #
 # 本地測試 API 失敗情境：
 #   Chrome DevTools → Network tab → 右鍵 TWSE/TPEX 請求(/openapi/v1/tpex_mainboard_quotes) → Block request URL
-#   再按「更新報價」，表格維持顯示 index.json 的成交值（備援生效）
+#   再按「更新報價」，表格維持顯示 index_<year>.json 的成交值（備援生效）
+import glob
 import json
 import sys
 import requests
@@ -57,19 +58,20 @@ def build_price_map(tpex_data: list[dict], twse_data: list[dict]) -> tuple[dict[
 
 
 def update_index_json(price_map: dict[str, float], price_date: str) -> int:
-    with open("data/index.json", "rb") as f:
-        stocks: list[dict] = json.loads(f.read().decode("utf-8"))
-
     updated = 0
-    for stock in stocks:
-        code = str(stock.get("代號", "")).strip()
-        if code in price_map:
-            stock["成交"] = price_map[code]
-            stock["股價日期"] = price_date
-            updated += 1
+    for path in glob.glob("data/index_*.json"):
+        with open(path, "rb") as f:
+            stocks: list[dict] = json.loads(f.read().decode("utf-8"))
 
-    with open("data/index.json", "w", encoding="utf-8") as f:
-        json.dump(stocks, f, ensure_ascii=False, separators=(",", ":"))
+        for stock in stocks:
+            code = str(stock.get("代號", "")).strip()
+            if code in price_map:
+                stock["成交"] = price_map[code]
+                stock["股價日期"] = price_date
+                updated += 1
+
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(stocks, f, ensure_ascii=False, separators=(",", ":"))
 
     return updated
 

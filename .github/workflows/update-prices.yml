@@ -25,11 +25,11 @@ jobs:
       - name: Update prices from TPEX API
         run: python update_prices.py
 
-      - name: Commit updated index.json
+      - name: Commit updated index_*.json
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/index.json
+          git add data/index_*.json
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else

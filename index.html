@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width">
-<title>股票股利排行 2025 – 四碼股票</title>
+<title>股票股利排行 – 四碼股票</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%232e5496'/></svg>">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -24,6 +24,11 @@ body {
   gap: 10px;
 }
 #topbar h1 { font-size: 14px; font-weight: bold; color: #fff; white-space: nowrap; }
+#yearSelect {
+  font-size: 13px; font-weight: bold; color: #fff;
+  background: #2e5496; border: 1px solid #6a8fc4; border-radius: 3px;
+  padding: 2px 4px; cursor: pointer;
+}
 #topbar .sep { color: #aac4f0; font-size: 12px; }
 #topbar .sub { color: #c8d8f8; font-size: 11px; }
 #topbar .price-meta { margin-left: auto; display: flex; align-items: center; gap: 8px; }
@@ -183,7 +188,8 @@ tbody td.center { text-align: center; }
 <body>
 
 <div id="topbar">
-  <h1>股票股利排行 2025</h1>
+  <h1>股票股利排行</h1>
+  <select id="yearSelect"></select>
   <span class="sep">–</span>
   <span class="sub">四碼股票 &nbsp;|&nbsp; 股利政策發放年度 &nbsp;|&nbsp; 股利分派與除權/息價殖利率</span>
   <div class="price-meta">
@@ -331,6 +337,8 @@ const state = {
 };
 let activeTab = 'lo';
 let priceDate = '';
+let currentYear = null;
+let lastPriceMap = null;  // 最近一次抓到的即時報價，切換年度後重新套用
 
 // ── 格式化工具 ──
 const fmt = (v, dec=2) => v == null ? '<span class="na">-</span>' : (+v).toFixed(dec);
@@ -517,6 +525,7 @@ async function fetchPrices(force = false) {
     try {
       const cache = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
       if (cache && !cacheExpired(cache.ts)) {
+        lastPriceMap = cache.map;
         applyPriceMap(cache.map);
         const t = new Date(cache.ts);
         const label = isTradingHours() ? '盤中快取' : '收盤';
@@ -569,6 +578,7 @@ async function fetchPrices(force = false) {
     }
 
     localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), map }));
+    lastPriceMap = map;
     applyPriceMap(map);
 
     const now = new Date();
@@ -599,29 +609,50 @@ function applyPriceMap(map) {
   });
 }
 
+// ── 年度切換 ──
+function applyLoadedData(data) {
+  allData = data;
+  const d0 = data.find(d => d['股價日期']);
+  if (!priceDate) priceDate = d0 ? d0['股價日期'] : '';
+
+  state.lo.baseData = data.filter(d => (d['成交'] ?? 0) < PRICE_CUT);
+  state.hi.baseData = data.filter(d => (d['成交'] ?? 0) >= PRICE_CUT);
+
+  document.getElementById('badge-lo').textContent = state.lo.baseData.length;
+  document.getElementById('badge-hi').textContent = state.hi.baseData.length;
+
+  // 若已抓過即時報價，切換年度後沿用同一份繼續套用；否則先用資料內建的股價渲染
+  if (lastPriceMap) applyPriceMap(lastPriceMap);
+  else ['lo', 'hi'].forEach(tab => applyFilter(tab));
+}
+
+async function loadYearData(year) {
+  const data = await fetch(`data/index_${year}.json`).then(r => r.json());
+  currentYear = year;
+  document.title = `股票股利排行 ${year} – 四碼股票`;
+  applyLoadedData(data);
+}
+
+async function initYearSelector() {
+  const years = await fetch('data/years.json').then(r => r.json());
+  const sel = document.getElementById('yearSelect');
+  sel.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+  sel.value = years[0];
+  sel.addEventListener('change', () => loadYearData(sel.value));
+  return years[0];
+}
+
 // ── 初始化 ──
-fetch('data/index.json')
-  .then(r => r.json())
-  .then(data => {
-    allData = data;
-    const d0 = data.find(d => d['股價日期']);
-    priceDate = d0 ? d0['股價日期'] : '';
-
-    state.lo.baseData = data.filter(d => (d['成交'] ?? 0) < PRICE_CUT);
-    state.hi.baseData = data.filter(d => (d['成交'] ?? 0) >= PRICE_CUT);
-
-    // Badge 筆數
-    document.getElementById('badge-lo').textContent = state.lo.baseData.length;
-    document.getElementById('badge-hi').textContent = state.hi.baseData.length;
+(async function init() {
+  try {
+    const defaultYear = await initYearSelector();
+    await loadYearData(defaultYear);
 
     // 建 thead
     document.getElementById('thead-lo').innerHTML = buildThead('lo');
     document.getElementById('thead-hi').innerHTML = buildThead('hi');
 
-    // 初始排序 + 渲染
     ['lo', 'hi'].forEach(tab => {
-      state[tab].filtered = doSort([...state[tab].baseData], tab);
-      renderTab(tab);
       updateSortHeader(tab);
 
       // 排序點擊
@@ -647,10 +678,10 @@ fetch('data/index.json')
     window.addEventListener('scroll', () => {
       document.getElementById('backTop').style.display = window.scrollY > 300 ? '' : 'none';
     });
-  })
-  .catch(e => {
+  } catch (e) {
     document.getElementById('loading').textContent = '載入失敗：' + e.message;
-  });
+  }
+})();
 </script>
 </body>
 </html>
