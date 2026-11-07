@@ -11,6 +11,7 @@ import sys
 import requests
 from datetime import datetime, timezone, timedelta
 
+import export_latest
 import scoring
 
 TW_TZ = timezone(timedelta(hours=8))
@@ -117,6 +118,8 @@ def main() -> None:
     if updated == 0:
         print("Warning: no stocks matched", file=sys.stderr)
         sys.exit(1)
+
+    print(f"Wrote {export_latest.write_latest()}")
 
 
 if __name__ == "__main__":

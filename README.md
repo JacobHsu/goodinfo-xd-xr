@@ -71,6 +71,7 @@ goodinfo-xd-xr/
 ├── fetch_stock_dividend.py     # 爬蟲 + JSON 產生腳本
 ├── fetch_stock_gifts.py        # 股東會紀念品（零股屋）
 ├── scoring.py                  # 排名決策節點的權重與分級（共用）
+├── export_latest.py            # 產生外部 API 用的 data/latest.json
 ├── update_prices.py            # 每週更新所有 index_<year>.json 的即時股價
 ├── index.html                  # 前端瀏覽器
 ├── docs/TECHNICAL_NOTES.md     # 爬蟲逆向工程筆記與踩坑記錄
@@ -83,6 +84,44 @@ goodinfo-xd-xr/
     ├── index_2026.json         # 2026 年度網頁資料
     └── years.json              # 網頁年度下拉選單的可選年度清單
 ```
+
+## 外部 API
+
+最新年度過濾好的完整名單（固定網址，已開放 CORS，可直接 `fetch`）：
+
+```
+https://jacobhsu.github.io/goodinfo-xd-xr/data/latest.json
+```
+
+```json
+{
+  "year": "2026",
+  "updated": "2026-11-07",
+  "price_date": "2026-11-06",
+  "count": 1162,
+  "stocks": [
+    {"rank": 1, "code": "5314", "name": "世紀*", "score": 98.1, "price": 20.85, "yield": 7.8,
+     "cash_div": 0.049, "stock_div": 1.579, "total_div": 1.627, "freq": "annual",
+     "ex_div_date": "2026-09-21", "gift": "德國KD頂級魚油(30粒/盒)"}
+  ]
+}
+```
+
+| key | 說明 |
+|-----|------|
+| `rank` | 排名（依 `score` 降冪，1 起算） |
+| `code` / `name` | 股票代號（字串）/ 名稱 |
+| `score` | 決策節點加權總分 0~100（見下方「排名依據」） |
+| `price` | 收盤價（日期見頂層 `price_date`） |
+| `yield` | 現價殖利率 %（合計股利 ÷ 現價，含分割保護） |
+| `cash_div` / `stock_div` / `total_div` | 現金 / 股票 / 合計股利（元） |
+| `freq` | 配息頻率：`annual` / `semiannual` / `quarterly` |
+| `ex_div_date` | 除息交易日（`YYYY-MM-DD`） |
+| `gift` | 股東會紀念品 |
+
+- `stocks` 已依 `rank` 排序；缺值為 `null`。
+- 由 `export_latest.py` 產生，`fetch_stock_dividend.py --json-only` 與每週 `update_prices.py` 會自動更新。
+- 需要全部欄位或特定年度，可改抓 `data/index_<year>.json`（年度清單見 `data/years.json`）。
 
 ## 排名依據
 

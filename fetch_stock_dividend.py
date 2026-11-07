@@ -9,6 +9,7 @@ from curl_cffi import requests as cf_requests
 import pandas as pd
 from urllib.parse import urlencode
 
+import export_latest
 import scoring
 
 # selRANK options: RANK=0 → 1~300, RANK=1 → 301~600, ..., RANK=7 → 2101~2295
@@ -360,6 +361,7 @@ def build_json(year: str) -> None:
     df.to_json(out_json, orient="records", force_ascii=False)
     print(f"JSON {len(df)} 筆，已存至 {out_json}")
     update_years_manifest(year)
+    print(f"外部 API 已更新：{export_latest.write_latest()}")
 
 
 def main():
