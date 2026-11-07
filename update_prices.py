@@ -11,6 +11,8 @@ import sys
 import requests
 from datetime import datetime, timezone, timedelta
 
+import scoring
+
 TW_TZ = timezone(timedelta(hours=8))
 TPEX_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes"
 TWSE_URL = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
@@ -69,6 +71,12 @@ def update_index_json(price_map: dict[str, float], price_date: str) -> int:
                 stock["成交"] = price_map[code]
                 stock["股價日期"] = price_date
                 updated += 1
+
+        # 股價變了 → 重算現價殖利率、受股價影響的節點分數與總分，並重新排名
+        if stocks and "總分" in stocks[0]:
+            for stock in stocks:
+                scoring.rescore_price_nodes(stock)
+            scoring.rerank(stocks)
 
         with open(path, "w", encoding="utf-8") as f:
             json.dump(stocks, f, ensure_ascii=False, separators=(",", ":"))

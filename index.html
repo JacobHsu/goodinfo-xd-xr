@@ -321,10 +321,10 @@ function nextTradingOpen() {
 }
 
 const NUM_COLS = new Set([
-  '排名','成交','漲跌價','漲跌幅',
+  '排名','總分','成交','漲跌價','漲跌幅',
   '現金股利','股票股利','合計股利',
   '除息價','除息價現金殖利率',
-  '除權價','除權價股票殖利率','除權息合計殖利率',
+  '除權價','除權價股票殖利率','除權息合計殖利率','現價殖利率',
   'ROE(%)','財報評分','OI(億)',
 ]);
 
@@ -332,8 +332,8 @@ let allData = [];  // 全部資料，兩個 tab 的 baseData 共享同一批物�
 
 // 各 tab 獨立狀態
 const state = {
-  lo: { baseData: [], filtered: [], sortCol: '除息價現金殖利率', sortDir: -1 },
-  hi: { baseData: [], filtered: [], sortCol: '除息價現金殖利率', sortDir: -1 },
+  lo: { baseData: [], filtered: [], sortCol: '總分', sortDir: -1 },
+  hi: { baseData: [], filtered: [], sortCol: '總分', sortDir: -1 },
 };
 let activeTab = 'lo';
 let priceDate = '';
@@ -375,6 +375,7 @@ function buildRow(d) {
   const link = `https://goodinfo.tw/tw/StockDetail.asp?STOCK_ID=${d['代號']}`;
   return `<tr>
     <td class="rank-cell">${d['排名']}</td>
+    <td class="center"><b>${d['總分'] != null ? (+d['總分']).toFixed(1) : '<span class="na">-</span>'}</b></td>
     <td class="center"><a class="code-link" href="${link}" target="_blank">${d['代號']}</a></td>
     <td class="name-cell">${d['名稱'] || ''}</td>
     <td>${fmt(d['成交'])}</td>
@@ -389,6 +390,7 @@ function buildRow(d) {
     <td>${fmt(d['除權價'])}</td>
     <td>${yieldColor(d['除權價股票殖利率'])}</td>
     <td><b>${yieldColor(d['除權息合計殖利率'])}</b></td>
+    <td><b>${yieldColor(d['現價殖利率'])}</b></td>
     <td class="center">${fmtDate(d['除息交易日'])}</td>
     <td class="center">${fmtDate(d['除權交易日'])}</td>
     <td class="center">${fmtDate(d['現金股利發放日'])}</td>
@@ -403,6 +405,7 @@ function buildRow(d) {
 function buildThead(tab) {
   return `<tr>
     <th rowspan="2" data-tab="${tab}" data-col="排名">排名</th>
+    <th rowspan="2" data-tab="${tab}" data-col="總分" title="決策節點加權總分（見 README）">總分</th>
     <th rowspan="2" data-tab="${tab}" data-col="代號">代號</th>
     <th rowspan="2" class="left" data-tab="${tab}" data-col="名稱">名稱</th>
     <th colspan="3" id="price-date-${tab}">股價（${priceDate}）</th>
@@ -410,7 +413,8 @@ function buildThead(tab) {
     <th colspan="3">股利（元）</th>
     <th colspan="2">除息</th>
     <th colspan="2">除權</th>
-    <th rowspan="2" data-tab="${tab}" data-col="除權息合計殖利率" class="hi5">合計<br>殖利率%</th>
+    <th rowspan="2" data-tab="${tab}" data-col="除權息合計殖利率" class="hi5" title="Goodinfo：股利 ÷ 除權息當時股價">合計<br>殖利率%</th>
+    <th rowspan="2" data-tab="${tab}" data-col="現價殖利率" class="hi5" title="合計股利 ÷ 現在股價（排名用）">現價<br>殖利率%</th>
     <th rowspan="2" data-tab="${tab}" data-col="除息交易日">除息日</th>
     <th rowspan="2" data-tab="${tab}" data-col="除權交易日">除權日</th>
     <th rowspan="2" data-tab="${tab}" data-col="現金股利發放日">發放日</th>
@@ -599,6 +603,11 @@ function applyPriceMap(map) {
     d['成交']  = p.price;
     d['漲跌價'] = p.change;
     d['漲跌幅'] = p.changePct;
+    // 現價殖利率跟著即時股價；總分仍為 JSON 中（每週）計算的值
+    // 規則同 scoring.current_yield：現價跌破除息（權）價一半視為分割，沿用 Goodinfo 殖利率
+    const base = d['除息價'] || d['除權價'];
+    if (d['合計股利'] != null && p.price > 0 && !(base && p.price < base * 0.5))
+      d['現價殖利率'] = +(d['合計股利'] / p.price * 100).toFixed(2);
   }
   // 重繪兩個 tab（保留現有篩選排序）
   const dateLabel = lastTradingDateLabel();

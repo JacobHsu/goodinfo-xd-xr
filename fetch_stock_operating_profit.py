@@ -1,11 +1,11 @@
 import os
-import re
 import time
 import random
-import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 from urllib.parse import urlencode
+
+from fetch_stock_dividend import solve_cloudflare_url, init_session
 
 BASE_URL = "https://goodinfo.tw/tw/StockList.asp"
 
@@ -19,59 +19,17 @@ COMMON_PARAMS = {
     "SORT": "",
 }
 
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8",
-    "Referer": BASE_URL,
-}
-
-TZ_OFFSET = -480
-
-
-def make_client_key() -> str:
-    ts = time.time() * 1000 / 86400000 - TZ_OFFSET / 1440
-    return f"2.3|43100.1033238637|46433.436657197|{TZ_OFFSET}|{ts}|{ts}"
-
-
-def init_session() -> tuple[requests.Session, str]:
-    session = requests.Session()
-    session.headers.update(HEADERS)
-
-    params = {**COMMON_PARAMS, "RANK_RANGE": "300"}
-    r = session.get(BASE_URL + "?" + urlencode(params), timeout=30)
-    r.encoding = "utf-8"
-
-    m = re.search(r"REINIT=([0-9.]+)", r.text)
-    reinit = m.group(1) if m else ""
-    session.cookies.set("CLIENT_KEY", make_client_key(), domain="goodinfo.tw", path="/")
-    return session, reinit
-
-
-def count_pages(session: requests.Session, reinit: str) -> int:
-    params = {**COMMON_PARAMS, "STEP": "DATA", "RANK": "0"}
-    if reinit:
-        params["REINIT"] = reinit
-    r = session.get(BASE_URL + "?" + urlencode(params), timeout=30)
-    r.encoding = "utf-8"
-    soup = BeautifulSoup(r.text, "lxml")
-    sel = soup.find("select", id="selRANK")
+def count_pages(html: str) -> int:
+    sel = BeautifulSoup(html, "lxml").find("select", id="selRANK")
     if sel:
         return len(sel.find_all("option"))
     return 1
 
 
-def fetch_page(session: requests.Session, reinit: str, rank_idx: int) -> str:
+def fetch_page(session, rank_idx: int) -> str:
     params = {**COMMON_PARAMS, "STEP": "DATA", "RANK": str(rank_idx)}
-    if reinit:
-        params["REINIT"] = reinit
     time.sleep(random.uniform(3.0, 5.0))
     r = session.get(BASE_URL + "?" + urlencode(params), timeout=30)
-    r.encoding = "utf-8"
     r.raise_for_status()
     return r.text
 
@@ -162,17 +120,19 @@ def report(df: pd.DataFrame) -> None:
 def main() -> None:
     os.makedirs("data", exist_ok=True)
 
-    print("初始化 session...")
-    session, reinit = init_session()
-    print(f"REINIT: {reinit}")
+    print("啟動瀏覽器並通過 Cloudflare 驗證...")
+    url = BASE_URL + "?" + urlencode({**COMMON_PARAMS, "RANK_RANGE": "300"})
+    cookies, user_agent, first_html = solve_cloudflare_url(url)
+    session = init_session(cookies, user_agent)
 
-    total_pages = count_pages(session, reinit)
+    total_pages = count_pages(first_html)
     print(f"共 {total_pages} 頁")
 
     all_rows: list[dict] = []
     for rank_idx in range(total_pages):
         print(f"取得第 {rank_idx + 1}/{total_pages} 頁（RANK={rank_idx}）...")
-        html = fetch_page(session, reinit, rank_idx)
+        # 驗證頁本身即含 RANK=0 的資料表，不必再請求一次
+        html = first_html if rank_idx == 0 else fetch_page(session, rank_idx)
         rows = parse_table(html)
         print(f"  取得 {len(rows)} 筆")
         if not rows:

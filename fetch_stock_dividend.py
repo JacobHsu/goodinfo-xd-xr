@@ -9,6 +9,8 @@ from curl_cffi import requests as cf_requests
 import pandas as pd
 from urllib.parse import urlencode
 
+import scoring
+
 # selRANK options: RANK=0 → 1~300, RANK=1 → 301~600, ..., RANK=7 → 2101~2295
 RANK_LABELS = {
     0: "1~300",
@@ -46,6 +48,16 @@ HEADERS = {
     "Referer": BASE_URL,
 }
 
+def _chrome_major_version() -> int | None:
+    """從 Windows registry 讀本機 Chrome 主版本；讀不到就回傳 None（交給 uc 自行判斷）。"""
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Google\Chrome\BLBeacon") as key:
+            return int(winreg.QueryValueEx(key, "version")[0].split(".")[0])
+    except Exception:
+        return None
+
+
 def solve_cloudflare(year: str, timeout: int = 180) -> tuple[dict, str, str]:
     """開一個有畫面的 Chrome（undetected_chromedriver）通過 Cloudflare JS 驗證，
     取得 cf_clearance 等 cookie，並回傳驗證頁本身的 HTML（即 RANK=0 那一頁）。
@@ -53,18 +65,22 @@ def solve_cloudflare(year: str, timeout: int = 180) -> tuple[dict, str, str]:
     若跳出需要手動點擊的驗證方塊，視窗會保持開啟，請直接在畫面上完成即可，
     腳本會持續等待直到 timeout 秒。
     """
+    params = make_common_params(year)
+    params["RANK_RANGE"] = "300"
+    return solve_cloudflare_url(BASE_URL + "?" + urlencode(params), timeout)
+
+
+def solve_cloudflare_url(url: str, timeout: int = 180) -> tuple[dict, str, str]:
+    """solve_cloudflare 的通用版：對任意 Goodinfo StockList 網址通過驗證，回傳 (cookies, user_agent, html)。"""
     import undetected_chromedriver as uc
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
 
-    params = make_common_params(year)
-    params["RANK_RANGE"] = "300"
-    url = BASE_URL + "?" + urlencode(params)
-
     opts = uc.ChromeOptions()
     opts.add_argument("--lang=zh-TW")
-    driver = uc.Chrome(options=opts, headless=False)
+    # uc 預設下載最新版 chromedriver；本機 Chrome 尚未更新時會版本不合，故指定本機主版本
+    driver = uc.Chrome(options=opts, headless=False, version_main=_chrome_major_version())
     try:
         driver.get(url)
         print("等待 Cloudflare 驗證通過...（若跳出驗證方塊，請於視窗中手動完成）")
@@ -185,6 +201,35 @@ def update_years_manifest(year: str) -> list[str]:
     return years_sorted
 
 
+def score_nodes(df: pd.DataFrame) -> pd.DataFrame:
+    """每個節點輸出 0~1 分數（缺值 0.5），加權成 0~100 的總分。規則與權重見 scoring.py。
+
+    Score 題：有序 rubric，落在錨點之間線性內插（= 期望等級 / (N-1)）。
+    Noul 題：是/否條件的 0~1 分數。
+    """
+    def node(values, anchors=None, levels=scoring.LEVELS):
+        v = pd.to_numeric(values, errors="coerce")
+        if anchors is not None:
+            v = v.map(lambda x: scoring.interp(None if pd.isna(x) else x, anchors, levels))
+        return pd.to_numeric(v, errors="coerce").fillna(scoring.MISSING).round(2)
+
+    nan = pd.Series(float("nan"), index=df.index)
+    df["分_配息安全"] = node(df["合計股利"] / df["EPS"].where(df["EPS"] > 0), [0.8, 1.0, 1.5], [1, 0.5, 0])
+    df["分_本業穩定"] = node(df["_本業穩定"] if "_本業穩定" in df else nan)
+    df["分_獲利能力"] = node(df["ROE(%)"], [5, 10, 15, 20])
+    df["分_財報體質"] = node(df["財報評分"], [40, 50, 60, 70])
+    df["分_股利不衰退"] = node((df["合計股利"] / df["_前年股利"].where(df["_前年股利"] > 0)).clip(upper=1)
+                            if "_前年股利" in df else nan)
+
+    # 受股價影響的節點（現價殖利率、紀念品）與總分：與 update_prices.py 共用同一函式
+    records = df.to_dict("records")
+    for r in records:
+        scoring.rescore_price_nodes(r)
+    for col in ["現價殖利率", "分_殖利率", "分_紀念品", "總分"]:
+        df[col] = [r[col] for r in records]
+    return df
+
+
 def build_json(year: str) -> None:
     prev_year = str(int(year) - 1)
     csv_4digit = f"data/stock_dividend_{year}_4digit.csv"
@@ -205,11 +250,12 @@ def build_json(year: str) -> None:
     df = df[df["合計股利"] > 0].copy()
     print(f"排除 {year} 未發股利 {before - len(df)} 檔，剩 {len(df)} 筆")
 
-    # 排除合計殖利率 < 1%
+    # 排除現價殖利率 < 1%（規則見 scoring.current_yield）
     df["除權息合計殖利率"] = pd.to_numeric(df["除權息合計殖利率"], errors="coerce").fillna(0)
+    cur_yield = pd.Series([scoring.current_yield(r) for r in df.to_dict("records")], index=df.index, dtype=float).fillna(0)
     before = len(df)
-    df = df[df["除權息合計殖利率"] >= 1].copy()
-    print(f"排除合計殖利率 < 1% 共 {before - len(df)} 檔，剩 {len(df)} 筆")
+    df = df[cur_yield >= 1].copy()
+    print(f"排除現價殖利率 < 1% 共 {before - len(df)} 檔，剩 {len(df)} 筆")
 
     # 排除前一年未發股利
     if os.path.exists(prev_csv):
@@ -218,6 +264,9 @@ def build_json(year: str) -> None:
         no_div = set(df_prev[df_prev["合計股利"] == 0]["代號"].astype(str))
         df = df[~df["代號"].astype(str).isin(no_div)].copy()
         print(f"排除 {prev_year} 未發股利 {len(no_div)} 檔，剩 {len(df)} 筆")
+        # 股利不衰退節點用：前一年合計股利
+        prev_div = df_prev.assign(代號=df_prev["代號"].astype(str)).drop_duplicates("代號").set_index("代號")["合計股利"]
+        df["_前年股利"] = df["代號"].astype(str).map(prev_div)
     else:
         print(f"找不到 {prev_csv}，不過濾前年資料")
 
@@ -264,13 +313,18 @@ def build_json(year: str) -> None:
         df_oi["代號"] = df_oi["代號"].astype(str)
         df_oi = df_oi.rename(columns={"平均營益(億)": "OI(億)"})
         df_oi["OI(億)"] = pd.to_numeric(df_oi["OI(億)"], errors="coerce")
+        # 本業穩定節點：各季營益中 > 0 的比例（只取比例，不把季欄寫進 JSON）
+        df_q = pd.read_csv(oi_csv, encoding="utf-8-sig")
+        q_cols = [c for c in df_q.columns if re.fullmatch(r"\d\dQ\d營益\(億\)", c)]
+        q = df_q[q_cols].apply(lambda s: pd.to_numeric(s.astype(str).str.replace(",", ""), errors="coerce"))
+        df_oi["_本業穩定"] = (q > 0).sum(axis=1) / q.notna().sum(axis=1).replace(0, float("nan"))
         df = df.merge(df_oi, on="代號", how="left")
         print(f"Join OI：{df['OI(億)'].notna().sum()}/{len(df)} 筆有資料")
     else:
         print(f"找不到 {oi_csv}，跳過 OI join")
 
     # Join 紀念品
-    gifts_tsv = "data/stock_gifts_2025.tsv"
+    gifts_tsv = f"data/stock_gifts_{year}.tsv"
     if os.path.exists(gifts_tsv):
         df_gifts = pd.read_csv(gifts_tsv, encoding="utf-8", sep="\t", on_bad_lines="skip")[["股號", "紀念品"]]
         df_gifts = df_gifts.rename(columns={"股號": "代號"})
@@ -292,9 +346,15 @@ def build_json(year: str) -> None:
         df = df[~(df["OI(億)"] < 0)].copy()
         print(f"排除 OI 負值 {before - len(df)} 檔，剩 {len(df)} 筆")
 
-    # 依殖利率降冪重排，排名重設為 1..N
-    df = df.sort_values("除權息合計殖利率", ascending=False).reset_index(drop=True)
+    # 決策節點打分（Jev System One 概念），依總分降冪重排，排名重設為 1..N
+    df = score_nodes(df)
+    df = df.drop(columns=[c for c in df.columns if c.startswith("_")])
+    df = df.sort_values("總分", ascending=False).reset_index(drop=True)
     df["排名"] = df.index + 1
+    show = ["排名", "代號", "名稱", "現價殖利率", "總分"] + [f"分_{n}" for n in scoring.NODE_WEIGHTS]
+    print("\n前 20 名：")
+    print(df[show].head(20).to_string(index=False))
+    print()
 
     out_json = f"data/index_{year}.json"
     df.to_json(out_json, orient="records", force_ascii=False)

@@ -315,7 +315,7 @@ onchange="ReloadStockList('...&RANK='+encodeURIComponent(selRANK.value))"
 | 8 | Join `stock_gifts_2025.tsv` → `紀念品` | — |
 | 9 | 排除 EPS < 0 或 ROE(%) < 0 | 當年虧損 |
 | 10 | 排除 OI(億) < 0 | 本業虧損，股利不可持續 |
-| 11 | 依 `除權息合計殖利率` 降冪排序，重設排名 | — |
+| 11 | `score_nodes()` 計算 7 個決策節點分數與 `總分`，依總分降冪排序，重設排名 | 見 README「排名依據」 |
 
 ---
 

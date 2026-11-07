@@ -69,6 +69,8 @@ python -m http.server 8080
 ```
 goodinfo-xd-xr/
 ├── fetch_stock_dividend.py     # 爬蟲 + JSON 產生腳本
+├── fetch_stock_gifts.py        # 股東會紀念品（零股屋）
+├── scoring.py                  # 排名決策節點的權重與分級（共用）
 ├── update_prices.py            # 每週更新所有 index_<year>.json 的即時股價
 ├── index.html                  # 前端瀏覽器
 ├── docs/TECHNICAL_NOTES.md     # 爬蟲逆向工程筆記與踩坑記錄
@@ -81,6 +83,62 @@ goodinfo-xd-xr/
     ├── index_2026.json         # 2026 年度網頁資料
     └── years.json              # 網頁年度下拉選單的可選年度清單
 ```
+
+## 排名依據
+
+`排名` 依 **總分**（0~100）降冪排列，網頁預設也依總分排序。總分借用 TypeSafe System One（Jev）
+決策模型的概念：每個指標是一個只問一件事的「決策節點」，以 **Score**（有序分級，落在級距之間線性內插成小數）
+或 **Noul**（是/否條件的 0~1 分數）題型打分，再加權加總。目標設定為「穩健存股」。
+權重與分級在 `scoring.py`（`fetch_stock_dividend.py` 與 `update_prices.py` 共用）。
+
+| 節點 | 題型 | 依據 | 分級（0 → 1） | 權重 |
+|------|------|------|----------------|------|
+| 殖利率 | Score | **現價殖利率** = 合計股利 ÷ 現在股價 | 2% / 4% / 6% / 8% | 30% |
+| 配息安全 | Noul | 配發率 = 合計股利 ÷ EPS | ≤ 80% 滿分、100% 半分、≥ 150% 零分 | 20% |
+| 本業穩定 | Noul | 近 12 季營業利益 | 為正的季數比例 | 15% |
+| 獲利能力 | Score | ROE | 5% / 10% / 15% / 20% | 10% |
+| 財報體質 | Score | Goodinfo 財報評分 | 40 / 50 / 60 / 70 | 10% |
+| 股利不衰退 | Noul | 當年 ÷ 前一年合計股利 | 比值，上限 1 | 10% |
+| 紀念品 CP | Score | 紀念品價值 ÷ 股價 | 0 / 0.5 / 1 / 2（價值取文字中「NN元」，其他實物估 30 元） | 5% |
+
+- 缺資料的節點以 0.5 分計。各節點分數另存於 JSON 的 `分_<節點>` 欄位（網頁不顯示），可用來檢查為何某檔排在那裡。
+- EPS、OI 不直接比絕對值（EPS 與股價高度相關、OI 反映公司規模），改用配發率與本業穩定度。
+- 既有硬篩選（DR、未發股利、殖利率 < 1%、前一年未發、EPS/ROE/OI 為負）仍先執行，相當於否決節點。
+- 權重與分級改動後需重跑 `python fetch_stock_dividend.py --year <year> --json-only`。
+
+### 兩種殖利率
+
+| 欄位 | 算法 | 何時更新 | 用途 |
+|------|------|----------|------|
+| 合計殖利率%（Goodinfo） | 股利 ÷ **除權息當時**股價 | 只有手動重抓股利時 | 對照 Goodinfo |
+| 現價殖利率% | 合計股利 ÷ **現在**股價 | `update_prices.py` 每週自動；網頁按「更新報價」即時 | 排名、< 1% 篩選 |
+
+- 股利資料久久才手動更新一次，但股價每週自動更新；改用現價讓殖利率與排名能自動跟上。
+  `update_prices.py` 更新股價後會重算 `現價殖利率`、`分_殖利率`、`分_紀念品`、`總分` 並重新排名，其餘節點不變。
+- 網頁按「更新報價」只會即時更新現價殖利率的顯示，總分仍是 JSON 裡每週算的值。
+- 「現價殖利率 < 1%」篩選只在 `--json-only` 時執行；每週股價更新不會把股票加入或移出名單。
+- **分割保護**：現價跌破除息（權）價的一半時，多半是股票分割或面額變更（名稱帶 `*` 的常見），
+  股利仍是分割前金額、現價殖利率會嚴重高估（例：寶雅 677 → 74 元，會算成 34%），此時改用 Goodinfo 的合計殖利率。
+  門檻為 `scoring.SPLIT_RATIO`。真的腰斬的股票也會被這條規則改用 Goodinfo 數字。
+- **已知限制**：半年配 / 季配的股票在重抓股利前只算到已公布的部分股利，殖利率會偏低（例如國巨 2026 只算到上半年）。
+
+## 資料來源
+
+`index_<year>.json` 由以下資料合併而成（`fetch_stock_dividend.py --json-only` 負責 join 與篩選）：
+
+| 資料檔 | 來源 | 產生方式 | 何時該更新 |
+|--------|------|----------|------------|
+| `stock_dividend_<year>.csv` | Goodinfo「股票股利」排行 | `python fetch_stock_dividend.py --year <year>` | 除權息季（約 6～9 月）期間 |
+| `stock_eps.csv`（EPS） | Goodinfo「年度EPS最高」排行 | `python fetch_stock_eps.py` | 每年 4 月（前一年年報 3/31 前公布） |
+| `stock_roe.csv`（ROE） | Goodinfo「年度ROE最高」排行 | `python fetch_stock_roe.py` | 同上 |
+| `stock_operating_profit.csv`（OI 營業利益） | Goodinfo「單季營業利益最低」排行 | `python fetch_stock_operating_profit.py` | 每季財報公布後（5/15、8/14、11/14、3/31） |
+| `stock_gifts_<year>.tsv`（紀念品） | [零股屋](https://www.stockroomtw.com/) 首頁的「預計發放的紀念品」表 | `python fetch_stock_gifts.py --year <year>` | 股東會季（約 3～6 月）期間 |
+| 股價（寫回 `index_<year>.json`） | TWSE / TPEX Open API | `python update_prices.py`（GitHub Actions 每週一自動執行） | 自動 |
+
+> - `fetch_stock_eps.py`、`fetch_stock_roe.py` 仍是舊的純 `requests` 寫法，Goodinfo 加上 Cloudflare 後應該已無法執行，
+>   下次要更新時需比照 `fetch_stock_operating_profit.py` 改用 `solve_cloudflare_url()`。
+> - 零股屋網站上的「下載推薦清單（Excel / PDF）」是**買股參考清單**（內容為前一年及更早的紀念品），不是當年實際發放的紀念品，不要用錯。
+> - `stock_gifts_2025.tsv` 是早期手動整理的，來源未記錄（格式與零股屋相同）。
 
 ## 注意事項
 
